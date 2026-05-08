@@ -1,0 +1,14 @@
+{
+  "name": "iextend",
+  "version": "0.0.1",
+  "private": true,
+  "description": "iExtend — iPad as a wireless second screen for Windows/Linux",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "view": "python3 -m http.server 8080"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

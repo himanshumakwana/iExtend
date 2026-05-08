@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>iExtend — iPad as second screen</title>
+<meta name="viewport" content="width=1440,initial-scale=1" />
+
+<style>
+  :root {
+    --bg: #0f1115;
+    --bg-2: #14171d;
+    --ink: #e7e9ee;
+    --ink-dim: rgba(231,233,238,0.6);
+    --ink-faint: rgba(231,233,238,0.3);
+    --line: rgba(255,255,255,0.08);
+    --line-strong: rgba(255,255,255,0.16);
+    --accent: #0a84ff;        /* iOS system blue */
+    --accent-2: #5e5ce6;      /* iOS indigo */
+    --good: #30d158;
+    --warn: #ff9f0a;
+    --bad:  #ff453a;
+  }
+  html, body { margin: 0; padding: 0; height: 100%;
+    color: var(--ink);
+    font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  #root { min-height: 100vh; }
+
+  /* utility */
+  .hairline { box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.08); }
+
+  /* Stage scaffolding */
+  .stage-shell {
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    padding: 20px 24px;
+    box-sizing: border-box;
+    gap: 14px;
+  }
+
+  .stage-top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 12px;
+    font-family: -apple-system, "SF Pro Display", system-ui;
+  }
+  .brand-mark {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: linear-gradient(140deg, #0a84ff 0%, #5e5ce6 100%);
+    display: grid; place-items: center;
+    box-shadow: 0 6px 16px rgba(10,132,255,0.4), inset 0 1px 0 rgba(255,255,255,0.4);
+  }
+  .brand-mark svg { display: block; }
+  .brand-name { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand-tag  { font-size: 12px; color: var(--ink-dim); margin-left: 4px; }
+
+  .scene-meta {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--ink-dim);
+  }
+  .scene-meta b { color: var(--ink); font-weight: 600; }
+
+  /* Main stage */
+  .stage {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 28px;
+    align-items: center;
+    justify-items: center;
+    padding: 8px 0;
+  }
+
+  /* Scene scrubber strip */
+  .strip-wrap {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 10px 12px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .strip {
+    display: flex; gap: 8px; overflow-x: auto;
+    flex: 1; scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.18) transparent;
+    padding: 2px 2px 4px;
+  }
+  .strip::-webkit-scrollbar { height: 6px; }
+  .strip::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 3px;}
+  .chip {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 8px 10px 9px; border-radius: 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--line);
+    cursor: pointer;
+    min-width: 120px;
+    transition: background .15s ease, border-color .15s ease, transform .1s ease;
+  }
+  .chip:hover { background: rgba(255,255,255,0.06); }
+  .chip[aria-current="true"] {
+    background: rgba(10,132,255,0.14);
+    border-color: rgba(10,132,255,0.55);
+  }
+  .chip .num {
+    font-size: 10px; letter-spacing: 0.08em; color: var(--ink-faint); text-transform: uppercase;
+  }
+  .chip .name {
+    font-size: 12.5px; color: var(--ink); font-weight: 500;
+  }
+  .chip[aria-current="true"] .num { color: rgba(10,132,255,0.9); }
+
+  .strip-nav {
+    display: flex; gap: 6px;
+  }
+  .nav-btn {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    display: grid; place-items: center; cursor: pointer;
+  }
+  .nav-btn:hover { background: rgba(255,255,255,0.08); }
+  .nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* Generic surface */
+  .glass {
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.10);
+  }
+
+  /* Tooltip-style annotations on stage */
+  .annot {
+    position: absolute;
+    padding: 8px 11px;
+    background: rgba(20,23,29,0.92);
+    color: var(--ink);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    font-size: 12px; line-height: 1.35;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.4);
+    max-width: 220px;
+  }
+  .annot:after {
+    content: ""; position: absolute;
+    width: 8px; height: 8px;
+    background: inherit; border-right: inherit; border-bottom: inherit;
+    transform: rotate(45deg);
+  }
+  .annot[data-side="left"]:after  { left: -5px;  top: 14px; border-bottom: 0; border-right: 0; }
+  .annot[data-side="right"]:after { right: -5px; top: 14px; border-top: 0;  border-left: 0; }
+  .annot .k { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: 2px; }
+
+  /* iPad bezel */
+  .ipad-frame {
+    border-radius: 38px;
+    background: #0a0a0a;
+    padding: 14px;
+    box-shadow:
+      0 60px 120px rgba(0,0,0,0.55),
+      0 0 0 1.5px #1a1a1a,
+      inset 0 0 0 1px rgba(255,255,255,0.05);
+    position: relative;
+  }
+  .ipad-screen {
+    border-radius: 26px;
+    overflow: hidden;
+    position: relative;
+    background: #000;
+  }
+  .ipad-cam {
+    position: absolute;
+    top: 50%; left: 6px; transform: translateY(-50%);
+    width: 6px; height: 6px; border-radius: 999px;
+    background: #1a1a1a;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+    z-index: 5;
+  }
+  .ipad-volume, .ipad-power {
+    position: absolute; background: #0a0a0a;
+    box-shadow: inset 0 0 0 1px #1a1a1a;
+  }
+  .ipad-power { top: -3px; right: 60px; width: 36px; height: 4px; border-radius: 2px 2px 0 0;}
+  .ipad-volume { top: -3px; right: 110px; width: 56px; height: 4px; border-radius: 2px 2px 0 0;}
+
+  /* PC frame: monitor on stand */
+  .monitor-wrap {
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+  }
+  .monitor {
+    border-radius: 18px;
+    background: #1a1c20;
+    padding: 14px 14px 26px;
+    box-shadow:
+      0 50px 100px rgba(0,0,0,0.55),
+      inset 0 0 0 1px #2a2c33,
+      inset 0 1px 0 rgba(255,255,255,0.04);
+    position: relative;
+  }
+  .monitor:after {
+    content: "";
+    position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%);
+    width: 50px; height: 6px; border-radius: 3px;
+    background: linear-gradient(180deg, #2a2c33, #1a1c20);
+  }
+  .monitor-screen {
+    border-radius: 6px; overflow: hidden;
+    background: #000;
+    box-shadow: inset 0 0 0 1px #000;
+  }
+  .monitor-stand {
+    width: 240px; height: 60px;
+    background: linear-gradient(180deg, #1a1c20 0%, #0f1115 100%);
+    clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%);
+    margin-top: -2px;
+  }
+  .monitor-base {
+    width: 280px; height: 8px; border-radius: 100px;
+    background: linear-gradient(180deg, #2a2c33, #14171d);
+    box-shadow: 0 12px 28px rgba(0,0,0,0.5);
+  }
+
+  /* SF-ish text classes */
+  .sf-display { font-family: -apple-system, "SF Pro Display", system-ui; letter-spacing: -0.02em; }
+  .sf-text    { font-family: -apple-system, "SF Pro Text", system-ui; }
+  .mono       { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  /* small kbd badge */
+  .kbd {
+    display: inline-grid; place-items: center;
+    min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 5px; background: rgba(255,255,255,0.08);
+    border: 1px solid var(--line-strong);
+    font-family: ui-monospace, "SF Mono", monospace; font-size: 11px;
+    color: var(--ink);
+  }
+</style>
+
+<script type="application/json" id="speaker-notes">[]</script>
+</head>
+<body>
+
+<div id="root"></div>
+
+<!-- React + Babel pinned -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx?v=2"></script>
+<script type="text/babel" src="tweaks-panel.jsx?v=2"></script>
+<script type="text/babel" src="src/icons.jsx?v=2"></script>
+<script type="text/babel" src="src/frames.jsx?v=2"></script>
+<script type="text/babel" src="src/scenes-ipad.jsx?v=2"></script>
+<script type="text/babel" src="src/scenes-pc.jsx?v=2"></script>
+<script type="text/babel" src="src/app.jsx?v=2"></script>
+
+</body>
+</html>
