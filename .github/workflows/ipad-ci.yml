@@ -109,3 +109,47 @@ jobs:
             swift test --parallel --enable-code-coverage 2>&1 \
               | tee swift-test.log
           fi
+
+      # ─── Produce CI artifact: simulator .app bundle ─────────────────
+      # Without an Apple Developer Program signing identity in CI we cannot
+      # produce a device-installable .ipa. We DO produce a Simulator-buildable
+      # .app that any reviewer can drag into Xcode → Simulator and run.
+      # release.yml does the signed device build via fastlane match on tag push.
+      - name: Stage simulator .app for upload
+        run: |
+          set -euo pipefail
+          DERIVED=$(xcodebuild -project iExtend.xcodeproj -scheme iExtend \
+                    -showBuildSettings -destination 'generic/platform=iOS Simulator' 2>/dev/null \
+                    | awk -F' = ' '/ TARGET_BUILD_DIR /{print $2; exit}')
+          if [ -z "$DERIVED" ] || [ ! -d "$DERIVED" ]; then
+            echo "::warning::Could not locate TARGET_BUILD_DIR; skipping artifact stage."
+            exit 0
+          fi
+          mkdir -p ci-stage
+          if [ -d "$DERIVED/iExtend.app" ]; then
+            cp -R "$DERIVED/iExtend.app" ci-stage/
+            cat > ci-stage/README.txt <<'EOF'
+          iExtend Simulator build (UNSIGNED — for iOS Simulator only)
+
+          To run:
+            1. Drag iExtend.app onto a booted iPad Pro simulator in Xcode.
+               (Xcode → Devices and Simulators, or `xcrun simctl install booted iExtend.app`)
+            2. Or: open the .app in Finder while a simulator is booted, then
+               `xcrun simctl install booted iExtend.app`.
+
+          Distribution-signed builds (TestFlight / App Store) are produced by
+          .github/workflows/release.yml on tag push and are NOT available here.
+          EOF
+            echo "Staged ci-stage/iExtend.app:"
+            du -sh ci-stage/iExtend.app
+          else
+            echo "::warning::iExtend.app not found at $DERIVED; nothing to upload."
+          fi
+
+      - name: Upload simulator .app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iextend-ipad-simulator-app
+          path: ipad/ci-stage/
+          if-no-files-found: warn
+          retention-days: 30

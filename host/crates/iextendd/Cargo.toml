@@ -3,6 +3,22 @@ name = "iextendd"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+description = "iExtend daemon — captures the host display, encodes it, and serves it to a paired iPad over WebRTC"
+license = "Apache-2.0"
+
+# `cargo deb` packages this binary as iextend-daemon_<version>_amd64.deb. The
+# real DKMS dependency (iextend-evdi-dkms) is declared in
+# host/installer/linux/debian/control and ships through the proper installer
+# pipeline in release.yml; this metadata is for the unsigned CI artifact only.
+[package.metadata.deb]
+name = "iextend-daemon"
+maintainer = "iExtend contributors"
+section = "net"
+priority = "optional"
+extended-description = "Host daemon that captures the laptop display, encodes it, and streams to a paired iPad acting as a wireless second screen."
+assets = [
+    ["target/release/iextendd", "/usr/bin/", "755"],
+]
 
 [dependencies]
 tokio              = { workspace = true }

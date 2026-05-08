@@ -3,6 +3,19 @@ name = "iextend-tray"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+description = "iExtend tray GUI — egui shell that talks to the daemon over a localhost socket"
+license = "Apache-2.0"
+
+[package.metadata.deb]
+name = "iextend-tray"
+maintainer = "iExtend contributors"
+section = "net"
+priority = "optional"
+depends = "iextend-daemon"
+extended-description = "GUI tray app that displays connection status and lets the user pair iPads, change settings, and start/stop sessions. Talks to iextend-daemon over a localhost socket."
+assets = [
+    ["target/release/iextend-tray", "/usr/bin/", "755"],
+]
 
 [dependencies]
 eframe             = { workspace = true }
