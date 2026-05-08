@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package iextend.v1;
+
+service Daemon {
+  rpc Status       (StatusRequest)       returns (StatusReply);
+  rpc StartSession (StartSessionRequest) returns (StartSessionReply);
+  rpc StopSession  (StopSessionRequest)  returns (StopSessionReply);
+  rpc GetSettings  (GetSettingsRequest)  returns (Settings);
+}
+
+message StatusRequest {}
+message StatusReply {
+  string version  = 1;
+  uint64 uptime_s = 2;
+  SessionState session = 3;
+}
+
+enum SessionState {
+  SESSION_STATE_IDLE         = 0;
+  SESSION_STATE_PAIRING      = 1;
+  SESSION_STATE_CONNECTING   = 2;
+  SESSION_STATE_LIVE         = 3;
+  SESSION_STATE_DEGRADED     = 4;
+  SESSION_STATE_DISCONNECTED = 5;
+}
+
+message StartSessionRequest { string peer_id = 1; }
+message StartSessionReply   { bool started   = 1; string detail = 2; }
+message StopSessionRequest  {}
+message StopSessionReply    { bool stopped   = 1; }
+
+message GetSettingsRequest {}
+message Settings {
+  bool   auto_connect_on_launch = 1;
+  string preferred_codec        = 2; // "av1" | "hevc" | "h264"
+  uint32 max_bitrate_kbps       = 3;
+  bool   hdr_enabled            = 4;
+}
