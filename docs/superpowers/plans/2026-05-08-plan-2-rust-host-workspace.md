@@ -101,11 +101,13 @@ Create `/home/tops/Projects/iExtend/host/rust-toolchain.toml`:
 
 ```toml
 [toolchain]
-channel = "1.83.0"
+channel = "1.90.0"
 components = ["rustfmt", "clippy"]
 profile = "minimal"
 targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
 ```
+
+(Originally drafted as 1.83.0 — bumped to 1.90.0 because eframe 0.29's transitive deps require Rust 1.88+. The 1.85 MSRV in workspace.package below is the *minimum* we promise to support; the toolchain pin is what we actually build with in CI.)
 
 - [ ] **Step 3: Workspace manifest**
 
@@ -129,7 +131,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.83"
+rust-version = "1.85"
 authors = ["iExtend contributors"]
 license = "Apache-2.0"
 repository = "https://github.com/REPLACE_WITH_OWNER/iExtend"
