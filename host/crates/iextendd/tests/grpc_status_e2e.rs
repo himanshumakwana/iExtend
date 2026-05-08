@@ -48,7 +48,9 @@ async fn status_rpc_round_trip() {
                 &self,
                 _r: tonic::Request<_proto::StopSessionRequest>,
             ) -> Result<tonic::Response<_proto::StopSessionReply>, tonic::Status> {
-                Ok(tonic::Response::new(_proto::StopSessionReply { stopped: false }))
+                Ok(tonic::Response::new(_proto::StopSessionReply {
+                    stopped: false,
+                }))
             }
             async fn get_settings(
                 &self,

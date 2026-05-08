@@ -24,8 +24,7 @@ impl LocalEndpoint {
         }
         #[cfg(unix)]
         {
-            let runtime = std::env::var("XDG_RUNTIME_DIR")
-                .unwrap_or_else(|_| "/tmp".to_string());
+            let runtime = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
             Self(format!("{runtime}/iextendd.sock"))
         }
     }

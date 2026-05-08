@@ -1,13 +1,13 @@
 use std::time::Instant;
 use tonic::{Request, Response, Status};
 
-pub mod proto { tonic::include_proto!("iextend.v1"); }
+pub mod proto {
+    tonic::include_proto!("iextend.v1");
+}
 
 use proto::{
-    daemon_server::Daemon,
-    SessionState, Settings, StatusReply, StatusRequest,
-    StartSessionReply, StartSessionRequest,
-    StopSessionReply, StopSessionRequest, GetSettingsRequest,
+    daemon_server::Daemon, GetSettingsRequest, SessionState, Settings, StartSessionReply,
+    StartSessionRequest, StatusReply, StatusRequest, StopSessionReply, StopSessionRequest,
 };
 
 pub struct DaemonImpl {
@@ -23,13 +23,25 @@ impl Daemon for DaemonImpl {
             session: SessionState::Idle as i32,
         }))
     }
-    async fn start_session(&self, _r: Request<StartSessionRequest>) -> Result<Response<StartSessionReply>, Status> {
-        Ok(Response::new(StartSessionReply { started: false, detail: "not implemented (Plan 5)".into() }))
+    async fn start_session(
+        &self,
+        _r: Request<StartSessionRequest>,
+    ) -> Result<Response<StartSessionReply>, Status> {
+        Ok(Response::new(StartSessionReply {
+            started: false,
+            detail: "not implemented (Plan 5)".into(),
+        }))
     }
-    async fn stop_session(&self, _r: Request<StopSessionRequest>) -> Result<Response<StopSessionReply>, Status> {
+    async fn stop_session(
+        &self,
+        _r: Request<StopSessionRequest>,
+    ) -> Result<Response<StopSessionReply>, Status> {
         Ok(Response::new(StopSessionReply { stopped: false }))
     }
-    async fn get_settings(&self, _r: Request<GetSettingsRequest>) -> Result<Response<Settings>, Status> {
+    async fn get_settings(
+        &self,
+        _r: Request<GetSettingsRequest>,
+    ) -> Result<Response<Settings>, Status> {
         Ok(Response::new(Settings {
             auto_connect_on_launch: false,
             preferred_codec: "hevc".into(),

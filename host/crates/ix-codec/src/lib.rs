@@ -12,7 +12,11 @@ pub enum CodecError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CodecKind { H264, Hevc, Av1 }
+pub enum CodecKind {
+    H264,
+    Hevc,
+    Av1,
+}
 
 #[async_trait]
 pub trait Encoder: Send + Sync {
@@ -27,5 +31,7 @@ pub struct NoOpEncoder;
 
 #[async_trait]
 impl Encoder for NoOpEncoder {
-    fn kind(&self) -> CodecKind { CodecKind::Hevc }
+    fn kind(&self) -> CodecKind {
+        CodecKind::Hevc
+    }
 }

@@ -9,15 +9,30 @@ pub enum RtcError {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum PeerState { Idle, Negotiating, Live, Failed }
+pub enum PeerState {
+    Idle,
+    Negotiating,
+    Live,
+    Failed,
+}
 
 pub struct PeerConnection {
     state: PeerState,
 }
 
 impl PeerConnection {
-    pub fn new() -> Self { Self { state: PeerState::Idle } }
-    pub fn state(&self) -> PeerState { self.state }
+    pub fn new() -> Self {
+        Self {
+            state: PeerState::Idle,
+        }
+    }
+    pub fn state(&self) -> PeerState {
+        self.state
+    }
 }
 
-impl Default for PeerConnection { fn default() -> Self { Self::new() } }
+impl Default for PeerConnection {
+    fn default() -> Self {
+        Self::new()
+    }
+}

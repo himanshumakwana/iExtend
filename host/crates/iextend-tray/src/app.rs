@@ -17,13 +17,19 @@ impl eframe::App for TrayApp {
 
             if ui.button("Ping iextendd").clicked() {
                 let endpoint = LocalEndpoint::default_for_user();
-                let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
-                self.daemon_status = Some(match rt.block_on(crate::client::fetch_status(&endpoint)) {
-                    Ok(s)  => s,
-                    Err(e) => format!("error: {e}"),
-                });
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                self.daemon_status =
+                    Some(match rt.block_on(crate::client::fetch_status(&endpoint)) {
+                        Ok(s) => s,
+                        Err(e) => format!("error: {e}"),
+                    });
             }
-            if let Some(s) = &self.daemon_status { ui.label(s); }
+            if let Some(s) = &self.daemon_status {
+                ui.label(s);
+            }
         });
     }
 }
