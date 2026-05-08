@@ -1,0 +1,111 @@
+name: ipad-ci
+
+# Runs `xcodebuild` against the iPad app on every push / PR that touches the
+# iPad tree. Builds for the iOS Simulator (no signing required) and runs the
+# Swift Package unit tests where they exist.
+#
+# Code signing for distribution (TestFlight / App Store) lives in release.yml,
+# which fires on tag push and uses fastlane match.
+
+on:
+  push:
+    paths: ['ipad/**', '.github/workflows/ipad-ci.yml']
+  pull_request:
+    paths: ['ipad/**', '.github/workflows/ipad-ci.yml']
+
+# Limit concurrent runs per branch — newer pushes cancel older ones.
+concurrency:
+  group: ipad-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15      # ships Xcode 16.x on the GitHub-hosted image
+    defaults: { run: { working-directory: ipad } }
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # WebRTC.framework would arrive via Git LFS once vendored. The fetch
+          # is harmless if no LFS objects exist yet.
+          lfs: true
+
+      - name: Xcode + Swift versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      # WebRTC.framework binary (~280 MB) is not checked in (see
+      # ipad/Frameworks/README.md). For CI we download a known-good stasel
+      # build the first time and cache it. If the URL changes, bump the
+      # cache key and the curl line.
+      - name: Cache WebRTC.framework
+        id: webrtc-cache
+        uses: actions/cache@v4
+        with:
+          path: ipad/Frameworks/WebRTC.xcframework
+          key: webrtc-xcframework-M127-2025-01
+
+      - name: Download WebRTC.xcframework (stasel build)
+        if: steps.webrtc-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p Frameworks
+          # stasel publishes signed Apple-platform builds at:
+          #   https://github.com/stasel/WebRTC/releases
+          # Pin a tag so a future release can't break our build silently.
+          curl -L --fail \
+            -o /tmp/WebRTC.xcframework.zip \
+            https://github.com/stasel/WebRTC/releases/download/127.0.0/WebRTC-M127.zip
+          unzip -q /tmp/WebRTC.xcframework.zip -d Frameworks/
+          ls Frameworks/
+
+      - name: Resolve SwiftPM dependencies
+        run: |
+          # Package.swift sits at ipad/ root. SPM caches under ~/Library/Caches/org.swift.swiftpm
+          xcodebuild -resolvePackageDependencies \
+            -project iExtend.xcodeproj \
+            -scheme iExtend
+
+      # Build for the iOS Simulator. No signing identity needed.
+      - name: Build (iOS Simulator)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project iExtend.xcodeproj \
+            -scheme iExtend \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            | xcbeautify --renderer github-actions
+
+      # Run unit tests on a booted simulator. Skipped if no test bundle exists yet.
+      - name: Test (iPad Pro 11" simulator)
+        run: |
+          set -o pipefail
+          if xcodebuild -list -project iExtend.xcodeproj 2>/dev/null \
+             | grep -qE 'iExtendKitTests|iExtendUITests|iExtendInputTests'; then
+            xcodebuild test \
+              -project iExtend.xcodeproj \
+              -scheme iExtend \
+              -configuration Debug \
+              -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M4),OS=latest' \
+              CODE_SIGNING_ALLOWED=NO \
+              | xcbeautify --renderer github-actions
+          else
+            echo "::notice::No test bundles defined yet — skipping xcodebuild test."
+          fi
+
+      # SwiftPM-level tests (the iExtendKit / iExtendUI / iExtendInput packages
+      # have their own XCTest targets). These only depend on swift-crypto +
+      # swift-atomics + the WebRTC binary above.
+      - name: Swift package tests
+        run: |
+          if [ -f Package.swift ]; then
+            swift test --parallel --enable-code-coverage 2>&1 \
+              | tee swift-test.log
+          fi
