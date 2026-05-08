@@ -15,8 +15,9 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
-# Pinned to 1.90 in rust-toolchain.toml; rust-version = 1.85 is the workspace MSRV (eframe deps need 1.88+; 1.85 is the old minimum)
+rust-version = "1.88"
+# rust-toolchain.toml pins 1.90.0 for CI reproducibility; 1.88 is the real MSRV
+# (eframe 0.29's transitive deps require 1.88).
 authors = ["iExtend contributors"]
 license = "Apache-2.0"
 repository = "https://github.com/REPLACE_WITH_OWNER/iExtend"

@@ -6,3 +6,8 @@ playwright-report/
 .playwright/
 *.log
 .DS_Store
+
+# Rust workspace build artifacts
+host/target/
+# Cargo.lock is intentionally tracked — iextendd and iextend-tray are binary crates,
+# so deterministic builds matter.
