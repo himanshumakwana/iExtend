@@ -52,7 +52,7 @@ The inlining order is fixed by inter-file globals; do not change it:
 ## Plan status
 
 - [x] Plan 1: `iExtend.html` visual deliverable (this plan)
-- [ ] Plan 2: Rust host workspace bootstrap
+- [x] Plan 2: Rust host workspace bootstrap
 - [ ] Plan 3: Windows IddCx signed kernel driver
 - [ ] Plan 4: Linux evdi integration + capture pipeline
 - [ ] Plan 5: WebRTC transport + codec selection
