@@ -7,6 +7,8 @@ members = [
     "crates/ix-codec",
     "crates/ix-rtc",
     "crates/ix-discover",
+    "crates/ix-pair-wire",
+    "crates/ix-display",
     "crates/ix-display-windows",
     "crates/ix-display-linux",
     "crates/ix-input",

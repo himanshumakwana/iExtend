@@ -17,12 +17,22 @@ ix-codec           = { path = "../ix-codec" }
 ix-rtc             = { path = "../ix-rtc" }
 ix-discover        = { path = "../ix-discover" }
 ix-input           = { path = "../ix-input" }
+ix-pair-wire       = { path = "../ix-pair-wire" }
+
+# Plan 7 keystore
+ed25519-dalek      = { version = "2", features = ["rand_core", "pkcs8"] }
+rand_core          = { version = "0.6", features = ["std"] }
+rusqlite           = { version = "0.32", features = ["bundled"] }
+base64             = "0.22"
+uuid               = { version = "1", features = ["v4"] }
 
 [target.'cfg(windows)'.dependencies]
 ix-display-windows = { path = "../ix-display-windows" }
+windows            = { version = "0.58", features = ["Win32_Security_Cryptography"] }
 
 [target.'cfg(unix)'.dependencies]
 ix-display-linux   = { path = "../ix-display-linux" }
+secret-service     = { version = "4", features = ["rt-tokio-crypto-rust"] }
 
 [dev-dependencies]
 tempfile   = "3"

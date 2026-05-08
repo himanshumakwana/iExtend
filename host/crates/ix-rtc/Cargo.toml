@@ -5,7 +5,23 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-async-trait = { workspace = true }
-thiserror   = { workspace = true }
-tracing     = { workspace = true }
-tokio       = { workspace = true }
+async-trait    = { workspace = true }
+thiserror      = { workspace = true }
+tracing        = { workspace = true }
+tokio          = { workspace = true }
+
+# Cryptography — pinned cipher suite per Plan 7:
+#   SPAKE2-P256-SHA256-HKDF-HMAC-SHA256, AES-256-GCM cert-wrap, Ed25519 device keys.
+spake2         = "0.4"
+sha2           = "0.10"
+hkdf           = "0.12"
+hmac           = "0.12"
+aes-gcm        = "0.10"
+ed25519-dalek  = { version = "2", features = ["rand_core"] }
+rand_core      = { version = "0.6", features = ["std"] }
+zeroize        = "1"
+
+ix-pair-wire   = { path = "../ix-pair-wire" }
+
+[dev-dependencies]
+hex            = "0.4"
