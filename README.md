@@ -31,3 +31,33 @@ npm install
 npx playwright install chromium
 npm test
 ```
+
+## Rebuilding iExtend.html from design-source
+
+`iExtend.html` is the inlined product of the seven `.jsx` files in
+`design-source/project/`. If the design ever changes, follow
+`docs/superpowers/plans/2026-05-08-iextend-html-visual-deliverable.md`
+to rebuild — Tasks 3–10 are the mechanical inlining steps.
+
+The inlining order is fixed by inter-file globals; do not change it:
+
+1. `design-canvas.jsx`
+2. `tweaks-panel.jsx`
+3. `src/icons.jsx`
+4. `src/frames.jsx`
+5. `src/scenes-ipad.jsx`
+6. `src/scenes-pc.jsx`
+7. `src/app.jsx`
+
+## Plan status
+
+- [x] Plan 1: `iExtend.html` visual deliverable (this plan)
+- [ ] Plan 2: Rust host workspace bootstrap
+- [ ] Plan 3: Windows IddCx signed kernel driver
+- [ ] Plan 4: Linux evdi integration + capture pipeline
+- [ ] Plan 5: WebRTC transport + codec selection
+- [ ] Plan 6: iPad Swift app shell + decode/render
+- [ ] Plan 7: SPAKE2 pairing flow (host + iPad)
+- [ ] Plan 8: Input forwarding + cursor reprojection
+- [ ] Plan 9: Installers + codesigning
+- [ ] Plan 10: Bench rig + CI hardware cluster
