@@ -1,0 +1,22 @@
+[package]
+name = "iextendd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tokio              = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow             = { workspace = true }
+ix-transport       = { path = "../ix-transport" }
+ix-codec           = { path = "../ix-codec" }
+ix-rtc             = { path = "../ix-rtc" }
+ix-discover        = { path = "../ix-discover" }
+ix-input           = { path = "../ix-input" }
+
+[target.'cfg(windows)'.dependencies]
+ix-display-windows = { path = "../ix-display-windows" }
+
+[target.'cfg(unix)'.dependencies]
+ix-display-linux   = { path = "../ix-display-linux" }
