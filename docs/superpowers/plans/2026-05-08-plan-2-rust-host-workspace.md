@@ -765,8 +765,11 @@ Add to **both** `host/crates/iextendd/Cargo.toml` and `host/crates/iextend-tray/
 
 ```toml
 [build-dependencies]
-tonic-build = { workspace = true }
+tonic-build         = { workspace = true }
+protoc-bin-vendored = "3"
 ```
+
+The `protoc-bin-vendored` crate ships pre-built `protoc` binaries for Linux/macOS/Windows so the workspace doesn't depend on a system-installed `protoc`. Without it, contributors and CI runners would need to `apt install protobuf-compiler` (or equivalent) before `cargo build` would work.
 
 Then add to both `[dependencies]` sections:
 
@@ -779,9 +782,11 @@ Create `host/crates/iextendd/build.rs`:
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let protoc = protoc_bin_vendored::protoc_bin_path()?;
+    std::env::set_var("PROTOC", protoc);
     tonic_build::configure()
         .build_server(true)
-        .build_client(false)
+        .build_client(true)   // also enabled for the daemon's integration tests in Task 6
         .compile_protos(&["../../proto/iextend.proto"], &["../../proto"])?;
     Ok(())
 }
@@ -791,6 +796,8 @@ Create `host/crates/iextend-tray/build.rs`:
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let protoc = protoc_bin_vendored::protoc_bin_path()?;
+    std::env::set_var("PROTOC", protoc);
     tonic_build::configure()
         .build_server(false)
         .build_client(true)
