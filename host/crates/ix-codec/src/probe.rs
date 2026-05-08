@@ -223,6 +223,7 @@ impl Probe {
     }
 
     #[cfg(target_os = "windows")]
+    #[allow(dead_code)] // Wired up in Plan 5 follow-up when feature flags activate the hardware-encoder probes.
     fn dll_loadable(name: &str) -> bool {
         // Stub: real impl uses LoadLibraryExA(LOAD_LIBRARY_AS_DATAFILE).
         // Returns false here to avoid actual DLL loading in probe context.
