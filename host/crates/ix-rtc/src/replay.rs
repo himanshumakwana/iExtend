@@ -54,7 +54,10 @@ impl Window {
     pub fn check_and_advance(&mut self, seq: u64) -> Result<(), ReplayError> {
         if seq == 0 || (self.high >= WINDOW_BITS as u64 && seq < self.high - WINDOW_BITS as u64 + 1)
         {
-            let lo = self.high.saturating_sub(WINDOW_BITS as u64).saturating_add(1);
+            let lo = self
+                .high
+                .saturating_sub(WINDOW_BITS as u64)
+                .saturating_add(1);
             return Err(ReplayError::TooOld(seq, lo, self.high));
         }
 
@@ -169,7 +172,10 @@ mod tests {
         w.check_and_advance(1).unwrap();
         w.check_and_advance(2000).unwrap();
         // seq 1 is now well outside the 1024-slot window
-        assert!(matches!(w.check_and_advance(1), Err(ReplayError::TooOld(_, _, _))));
+        assert!(matches!(
+            w.check_and_advance(1),
+            Err(ReplayError::TooOld(_, _, _))
+        ));
     }
 
     #[test]
@@ -179,7 +185,10 @@ mod tests {
         // seq 1 is at the oldest edge of the window — accepted once.
         assert!(w.check_and_advance(1).is_ok());
         // seq 0 is below the window's bottom — rejected.
-        assert!(matches!(w.check_and_advance(0), Err(ReplayError::TooOld(_, _, _))));
+        assert!(matches!(
+            w.check_and_advance(0),
+            Err(ReplayError::TooOld(_, _, _))
+        ));
     }
 
     #[test]

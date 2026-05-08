@@ -53,10 +53,10 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
-#[cfg(windows)]
-mod vsync_windows;
 #[cfg(target_os = "linux")]
 mod vsync_linux;
+#[cfg(windows)]
+mod vsync_windows;
 
 // ── digit LUT ─────────────────────────────────────────────────────────────────
 
@@ -80,7 +80,10 @@ const SEG: [u8; 10] = [
 // ── CLI ───────────────────────────────────────────────────────────────────────
 
 #[derive(Parser, Debug, Clone)]
-#[command(version, about = "Paint a vsync-locked timecode for the bench camera rig")]
+#[command(
+    version,
+    about = "Paint a vsync-locked timecode for the bench camera rig"
+)]
 struct Args {
     /// Digit height in pixels (80+ recommended for 240 fps readability)
     #[arg(long, default_value_t = 80)]
@@ -133,28 +136,26 @@ impl ApplicationHandler for App {
 
         let window = Arc::new(el.create_window(attrs).expect("create window"));
 
-        let context = softbuffer::Context::new(window.clone())
-            .expect("softbuffer context");
-        let surface = softbuffer::Surface::new(&context, window.clone())
-            .expect("softbuffer surface");
+        let context = softbuffer::Context::new(window.clone()).expect("softbuffer context");
+        let surface =
+            softbuffer::Surface::new(&context, window.clone()).expect("softbuffer surface");
 
         self.context = Some(context);
         self.surface = Some(surface);
         self.window = Some(window);
     }
 
-    fn window_event(
-        &mut self,
-        el: &ActiveEventLoop,
-        _id: WindowId,
-        event: WindowEvent,
-    ) {
+    fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => el.exit(),
 
             WindowEvent::RedrawRequested => {
-                let Some(window) = self.window.as_ref() else { return };
-                let Some(surface) = self.surface.as_mut() else { return };
+                let Some(window) = self.window.as_ref() else {
+                    return;
+                };
+                let Some(surface) = self.surface.as_mut() else {
+                    return;
+                };
 
                 let size = window.inner_size();
                 let w = size.width;
@@ -164,10 +165,7 @@ impl ApplicationHandler for App {
                 }
 
                 surface
-                    .resize(
-                        NonZeroU32::new(w).unwrap(),
-                        NonZeroU32::new(h).unwrap(),
-                    )
+                    .resize(NonZeroU32::new(w).unwrap(), NonZeroU32::new(h).unwrap())
                     .expect("resize surface");
 
                 let mut buf = surface.buffer_mut().expect("buffer_mut");
@@ -304,13 +302,27 @@ fn draw_digit(
         }};
     }
 
-    if segs & (1 << 6) != 0 { h_bar!(ox, oy, dw); }                      // top
-    if segs & (1 << 5) != 0 { v_bar!(ox + dw - seg_t, oy, half); }       // top-right
-    if segs & (1 << 4) != 0 { v_bar!(ox + dw - seg_t, oy + half, half); }// bot-right
-    if segs & (1 << 3) != 0 { h_bar!(ox, oy + dh - seg_t, dw); }         // bottom
-    if segs & (1 << 2) != 0 { v_bar!(ox, oy + half, half); }             // bot-left
-    if segs & (1 << 1) != 0 { v_bar!(ox, oy, half); }                    // top-left
-    if segs & (1 << 0) != 0 { h_bar!(ox, oy + half - seg_t / 2, dw); }   // middle
+    if segs & (1 << 6) != 0 {
+        h_bar!(ox, oy, dw);
+    } // top
+    if segs & (1 << 5) != 0 {
+        v_bar!(ox + dw - seg_t, oy, half);
+    } // top-right
+    if segs & (1 << 4) != 0 {
+        v_bar!(ox + dw - seg_t, oy + half, half);
+    } // bot-right
+    if segs & (1 << 3) != 0 {
+        h_bar!(ox, oy + dh - seg_t, dw);
+    } // bottom
+    if segs & (1 << 2) != 0 {
+        v_bar!(ox, oy + half, half);
+    } // bot-left
+    if segs & (1 << 1) != 0 {
+        v_bar!(ox, oy, half);
+    } // top-left
+    if segs & (1 << 0) != 0 {
+        h_bar!(ox, oy + half - seg_t / 2, dw);
+    } // middle
 }
 
 // ── entry point ───────────────────────────────────────────────────────────────

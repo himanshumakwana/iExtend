@@ -67,20 +67,16 @@ pub struct evdi_buffer {
 // ---------------------------------------------------------------------------
 
 /// Called when the virtual monitor's mode changes (resolution / refresh).
-pub type evdi_mode_changed_cb =
-    unsafe extern "C" fn(mode: evdi_mode, user_data: *mut c_void);
+pub type evdi_mode_changed_cb = unsafe extern "C" fn(mode: evdi_mode, user_data: *mut c_void);
 
 /// Called when a new frame is ready in the registered buffer.
-pub type evdi_update_ready_cb =
-    unsafe extern "C" fn(buffer_id: c_int, user_data: *mut c_void);
+pub type evdi_update_ready_cb = unsafe extern "C" fn(buffer_id: c_int, user_data: *mut c_void);
 
 /// Called when the DPMS state changes (on/off/standby).
-pub type evdi_dpms_cb =
-    unsafe extern "C" fn(dpms_mode: c_int, user_data: *mut c_void);
+pub type evdi_dpms_cb = unsafe extern "C" fn(dpms_mode: c_int, user_data: *mut c_void);
 
 /// Called when the CRTC state changes.
-pub type evdi_crtc_state_cb =
-    unsafe extern "C" fn(state: c_int, user_data: *mut c_void);
+pub type evdi_crtc_state_cb = unsafe extern "C" fn(state: c_int, user_data: *mut c_void);
 
 // ---------------------------------------------------------------------------
 // Event-dispatch context
@@ -135,24 +131,19 @@ pub struct LibevdiApi {
     evdi_disconnect: unsafe extern "C" fn(handle: evdi_handle),
 
     /// Register a CPU-visible capture buffer with the module.
-    evdi_register_buffer:
-        unsafe extern "C" fn(handle: evdi_handle, buffer: evdi_buffer),
+    evdi_register_buffer: unsafe extern "C" fn(handle: evdi_handle, buffer: evdi_buffer),
 
     /// Unregister and release a previously registered capture buffer.
-    evdi_unregister_buffer:
-        unsafe extern "C" fn(handle: evdi_handle, buffer_id: c_int),
+    evdi_unregister_buffer: unsafe extern "C" fn(handle: evdi_handle, buffer_id: c_int),
 
     /// Ask the module to fill the given buffer on the next vsync.
     /// Returns `true` if an update was already pending.
-    evdi_request_update:
-        unsafe extern "C" fn(handle: evdi_handle, buffer_id: c_int) -> bool,
+    evdi_request_update: unsafe extern "C" fn(handle: evdi_handle, buffer_id: c_int) -> bool,
 
     /// Drain pending events from the kernel module into the event context.
-    evdi_handle_events:
-        unsafe extern "C" fn(handle: evdi_handle, ctx: *mut evdi_event_context),
+    evdi_handle_events: unsafe extern "C" fn(handle: evdi_handle, ctx: *mut evdi_event_context),
 
     /// Return a pollable file descriptor that becomes readable when events
     /// are pending.  Callers can select/poll/epoll this fd.
-    evdi_get_event_ready:
-        unsafe extern "C" fn(handle: evdi_handle) -> c_int,
+    evdi_get_event_ready: unsafe extern "C" fn(handle: evdi_handle) -> c_int,
 }

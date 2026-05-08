@@ -164,7 +164,10 @@ mod tests {
 
         // Late ack for seq=0 arrives — clears it from pending.
         hb.on_ack(seq, t0 + interval * 3 + Duration::from_millis(50));
-        assert!(hb.pending_count() < MAX_MISSED, "ack should reduce pending count");
+        assert!(
+            hb.pending_count() < MAX_MISSED,
+            "ack should reduce pending count"
+        );
 
         // Next tick should NOT be Disconnected.
         let evt = hb.tick(t0 + interval * 4);

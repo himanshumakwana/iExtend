@@ -12,16 +12,15 @@
 
 use crossbeam::queue::ArrayQueue;
 use ix_display::{DisplayMode, DisplaySource};
-use ix_display_linux::{LinuxDisplaySource, evdi::EvdiMonitor};
+use ix_display_linux::{evdi::EvdiMonitor, LinuxDisplaySource};
 use std::sync::Arc;
 use std::time::Duration;
 
 /// Verify that we can open and close an evdi device handle without crashing.
 #[test]
 fn evdi_open_close_roundtrip() {
-    let mon = EvdiMonitor::open().expect(
-        "evdi device should be present — run: sudo modprobe evdi initial_device_count=1",
-    );
+    let mon = EvdiMonitor::open()
+        .expect("evdi device should be present — run: sudo modprobe evdi initial_device_count=1");
     drop(mon);
 }
 
@@ -29,7 +28,8 @@ fn evdi_open_close_roundtrip() {
 #[test]
 fn evdi_connect_disconnect() {
     let mut mon = EvdiMonitor::open().expect("evdi present");
-    mon.connect(1920, 1080, 120).expect("connect should succeed");
+    mon.connect(1920, 1080, 120)
+        .expect("connect should succeed");
     drop(mon); // Drop calls evdi_disconnect + evdi_close
 }
 
@@ -41,8 +41,7 @@ fn evdi_connect_disconnect() {
 /// - xdg-desktop-portal running (Wayland path) or X with XShm+XDamage (X11).
 #[test]
 fn end_to_end_first_frame() {
-    let mut src = LinuxDisplaySource::new()
-        .expect("LinuxDisplaySource::new() should succeed");
+    let mut src = LinuxDisplaySource::new().expect("LinuxDisplaySource::new() should succeed");
     let mode = DisplayMode::default(); // 1920×1080 @ 120 Hz
     src.create_virtual_monitor(mode)
         .expect("create_virtual_monitor should succeed");
@@ -52,8 +51,16 @@ fn end_to_end_first_frame() {
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
     while std::time::Instant::now() < deadline {
         if let Some(frame) = src.capture_frame() {
-            assert!(frame.width >= 1920, "frame width too small: {}", frame.width);
-            assert!(frame.height >= 1080, "frame height too small: {}", frame.height);
+            assert!(
+                frame.width >= 1920,
+                "frame width too small: {}",
+                frame.width
+            );
+            assert!(
+                frame.height >= 1080,
+                "frame height too small: {}",
+                frame.height
+            );
             src.destroy();
             return;
         }

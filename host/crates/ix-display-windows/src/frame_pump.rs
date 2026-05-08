@@ -50,14 +50,14 @@ impl ReleaseChannel {
 pub struct GpuFrame {
     /// Raw NT handle value (not a `HANDLE` to avoid `windows` crate dep in
     /// public API). Pass to `ID3D11Device::OpenSharedResource1`.
-    pub shared_handle:   u64,
-    pub width:           u32,
-    pub height:          u32,
-    pub dirty_rects:     Vec<RECT>,
+    pub shared_handle: u64,
+    pub width: u32,
+    pub height: u32,
+    pub dirty_rects: Vec<RECT>,
     /// Microseconds since the QueryPerformanceCounter epoch (boot-relative).
     pub present_time_us: u64,
-    pub(crate) seq:      u64,
-    pub(crate) release:  Weak<ReleaseChannel>,
+    pub(crate) seq: u64,
+    pub(crate) release: Weak<ReleaseChannel>,
 }
 
 impl std::fmt::Debug for GpuFrame {
@@ -174,19 +174,19 @@ pub fn run(conn: Connection, tx: Sender<GpuFrame>) {
 // ---------------------------------------------------------------------------
 
 fn make_frame(
-    header:  IEXDD_FRAME_HEADER,
-    rects:   Vec<RECT>,
+    header: IEXDD_FRAME_HEADER,
+    rects: Vec<RECT>,
     release: Weak<ReleaseChannel>,
 ) -> GpuFrame {
     let present_us = qpc_to_us(header.PresentTimeQpc);
 
     GpuFrame {
-        shared_handle:   header.SharedTextureHandle as u64,
-        width:           header.Width,
-        height:          header.Height,
-        dirty_rects:     rects,
+        shared_handle: header.SharedTextureHandle as u64,
+        width: header.Width,
+        height: header.Height,
+        dirty_rects: rects,
         present_time_us: present_us,
-        seq:             header.AcquireSeq,
+        seq: header.AcquireSeq,
         release,
     }
 }

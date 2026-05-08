@@ -6,7 +6,7 @@
 //!
 //! They are intentionally kept OS-agnostic so they can run in CI on any host.
 
-use ix_display_linux::{Backend, EnvProbe, detect_backend};
+use ix_display_linux::{detect_backend, Backend, EnvProbe};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------

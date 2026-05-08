@@ -16,15 +16,15 @@ use crate::q16::{q16_from_f32, q16_i16_from_f32, q16_i16_to_f32, q16_to_f32};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Kind {
-    TouchBegin  = 0x01,
-    TouchMove   = 0x02,
-    TouchEnd    = 0x03,
+    TouchBegin = 0x01,
+    TouchMove = 0x02,
+    TouchEnd = 0x03,
     PencilBegin = 0x10,
-    PencilMove  = 0x11,
-    PencilEnd   = 0x12,
-    KeyDown     = 0x20,
-    KeyUp       = 0x21,
-    Modifier    = 0x22,
+    PencilMove = 0x11,
+    PencilEnd = 0x12,
+    KeyDown = 0x20,
+    KeyUp = 0x21,
+    Modifier = 0x22,
 }
 
 impl Kind {
@@ -40,7 +40,7 @@ impl Kind {
             0x20 => Some(Kind::KeyDown),
             0x21 => Some(Kind::KeyUp),
             0x22 => Some(Kind::Modifier),
-            _    => None,
+            _ => None,
         }
     }
 }
@@ -51,11 +51,11 @@ pub const PACKET_LEN: usize = 32;
 /// The 32-byte wire packet.
 #[derive(Debug, Clone)]
 pub struct Packet {
-    pub kind:    Kind,
+    pub kind: Kind,
     pub time_us: u64,
-    pub seq:     u32,
+    pub seq: u32,
     /// Flags: bit 0 = predicted, bit 1 = coalesced. Bits 2-7 must be zero.
-    pub flags:   u8,
+    pub flags: u8,
     /// 18 raw payload bytes; interpret with PencilPayload / TouchPayload / KeyPayload.
     pub payload: [u8; 18],
 }
@@ -94,11 +94,17 @@ impl Packet {
             return Err(DecodeError::ReservedBitsSet);
         }
         let time_us = u64::from_le_bytes(b[1..9].try_into().unwrap());
-        let seq     = u32::from_le_bytes(b[9..13].try_into().unwrap());
-        let flags   = b[13];
+        let seq = u32::from_le_bytes(b[9..13].try_into().unwrap());
+        let flags = b[13];
         let mut payload = [0u8; 18];
         payload.copy_from_slice(&b[14..32]);
-        Ok(Self { kind, time_us, seq, flags, payload })
+        Ok(Self {
+            kind,
+            time_us,
+            seq,
+            flags,
+            payload,
+        })
     }
 }
 
@@ -119,11 +125,11 @@ pub struct PencilPayload {
     pub x: f32,
     pub y: f32,
     pub pressure: f32,
-    pub tilt:     f32,
-    pub azimuth:  f32,
-    pub twist:    f32,
-    pub barrel:   bool,
-    pub hover:    bool,
+    pub tilt: f32,
+    pub azimuth: f32,
+    pub twist: f32,
+    pub barrel: bool,
+    pub hover: bool,
 }
 
 impl PencilPayload {
@@ -136,20 +142,20 @@ impl PencilPayload {
         b[12..14].copy_from_slice(&q16_i16_from_f32(self.azimuth).to_le_bytes());
         b[14..16].copy_from_slice(&q16_i16_from_f32(self.twist).to_le_bytes());
         b[16] = self.barrel as u8;
-        b[17] = self.hover  as u8;
+        b[17] = self.hover as u8;
         b
     }
 
     pub fn from_bytes(b: &[u8; 18]) -> Self {
         Self {
-            x:        q16_to_f32(i32::from_le_bytes(b[0..4].try_into().unwrap())),
-            y:        q16_to_f32(i32::from_le_bytes(b[4..8].try_into().unwrap())),
+            x: q16_to_f32(i32::from_le_bytes(b[0..4].try_into().unwrap())),
+            y: q16_to_f32(i32::from_le_bytes(b[4..8].try_into().unwrap())),
             pressure: q16_i16_to_f32(i16::from_le_bytes(b[8..10].try_into().unwrap())),
-            tilt:     q16_i16_to_f32(i16::from_le_bytes(b[10..12].try_into().unwrap())),
-            azimuth:  q16_i16_to_f32(i16::from_le_bytes(b[12..14].try_into().unwrap())),
-            twist:    q16_i16_to_f32(i16::from_le_bytes(b[14..16].try_into().unwrap())),
-            barrel:   b[16] != 0,
-            hover:    b[17] != 0,
+            tilt: q16_i16_to_f32(i16::from_le_bytes(b[10..12].try_into().unwrap())),
+            azimuth: q16_i16_to_f32(i16::from_le_bytes(b[12..14].try_into().unwrap())),
+            twist: q16_i16_to_f32(i16::from_le_bytes(b[14..16].try_into().unwrap())),
+            barrel: b[16] != 0,
+            hover: b[17] != 0,
         }
     }
 }
@@ -166,11 +172,11 @@ impl PencilPayload {
 
 #[derive(Debug, Clone, Copy)]
 pub struct TouchPayload {
-    pub x:            f32,
-    pub y:            f32,
+    pub x: f32,
+    pub y: f32,
     pub radius_major: f32,
     pub radius_minor: f32,
-    pub force:        f32,
+    pub force: f32,
 }
 
 impl TouchPayload {
@@ -187,11 +193,11 @@ impl TouchPayload {
 
     pub fn from_bytes(b: &[u8; 18]) -> Self {
         Self {
-            x:            q16_to_f32(i32::from_le_bytes(b[0..4].try_into().unwrap())),
-            y:            q16_to_f32(i32::from_le_bytes(b[4..8].try_into().unwrap())),
+            x: q16_to_f32(i32::from_le_bytes(b[0..4].try_into().unwrap())),
+            y: q16_to_f32(i32::from_le_bytes(b[4..8].try_into().unwrap())),
             radius_major: q16_i16_to_f32(i16::from_le_bytes(b[8..10].try_into().unwrap())),
             radius_minor: q16_i16_to_f32(i16::from_le_bytes(b[10..12].try_into().unwrap())),
-            force:        q16_i16_to_f32(i16::from_le_bytes(b[12..14].try_into().unwrap())),
+            force: q16_i16_to_f32(i16::from_le_bytes(b[12..14].try_into().unwrap())),
         }
     }
 }
@@ -207,8 +213,8 @@ impl TouchPayload {
 #[derive(Debug, Clone, Copy)]
 pub struct KeyPayload {
     pub usage_page: u16,
-    pub usage:      u16,
-    pub modifiers:  u16,
+    pub usage: u16,
+    pub modifiers: u16,
 }
 
 impl KeyPayload {
@@ -224,8 +230,8 @@ impl KeyPayload {
     pub fn from_bytes(b: &[u8; 18]) -> Self {
         Self {
             usage_page: u16::from_le_bytes(b[0..2].try_into().unwrap()),
-            usage:      u16::from_le_bytes(b[2..4].try_into().unwrap()),
-            modifiers:  u16::from_le_bytes(b[4..6].try_into().unwrap()),
+            usage: u16::from_le_bytes(b[2..4].try_into().unwrap()),
+            modifiers: u16::from_le_bytes(b[4..6].try_into().unwrap()),
         }
     }
 }
@@ -237,7 +243,8 @@ mod tests {
     use super::*;
     fn make_pencil_packet() -> Packet {
         let pl = PencilPayload {
-            x: 768.5, y: 1024.25,
+            x: 768.5,
+            y: 1024.25,
             pressure: 0.3,
             tilt: 0.4,
             azimuth: 0.5,
@@ -270,17 +277,37 @@ mod tests {
         assert_eq!(back.flags, 0b01);
         assert_eq!(back.time_us, 1_700_000_000_000_000);
         let pl = PencilPayload::from_bytes(&back.payload);
-        assert!((pl.x - 768.5).abs() < 1.0 / 65_536.0, "x mismatch: {}", pl.x);
-        assert!((pl.y - 1024.25).abs() < 1.0 / 65_536.0, "y mismatch: {}", pl.y);
+        assert!(
+            (pl.x - 768.5).abs() < 1.0 / 65_536.0,
+            "x mismatch: {}",
+            pl.x
+        );
+        assert!(
+            (pl.y - 1024.25).abs() < 1.0 / 65_536.0,
+            "y mismatch: {}",
+            pl.y
+        );
         assert!(pl.barrel, "barrel should be set");
-        assert!(!pl.hover,  "hover should be clear");
+        assert!(!pl.hover, "hover should be clear");
     }
 
     #[test]
     fn touch_roundtrip() {
-        let pl = TouchPayload { x: 100.0, y: 200.0, radius_major: 5.0, radius_minor: 4.0, force: 0.25 };
+        let pl = TouchPayload {
+            x: 100.0,
+            y: 200.0,
+            radius_major: 5.0,
+            radius_minor: 4.0,
+            force: 0.25,
+        };
         let payload_bytes = pl.into_bytes();
-        let packet = Packet { kind: Kind::TouchBegin, time_us: 42, seq: 1, flags: 0, payload: payload_bytes };
+        let packet = Packet {
+            kind: Kind::TouchBegin,
+            time_us: 42,
+            seq: 1,
+            flags: 0,
+            payload: payload_bytes,
+        };
         let bytes = packet.to_bytes();
         let back = Packet::from_bytes(&bytes).unwrap();
         let pl2 = TouchPayload::from_bytes(&back.payload);
@@ -290,9 +317,19 @@ mod tests {
 
     #[test]
     fn key_roundtrip() {
-        let pl = KeyPayload { usage_page: 7, usage: 4, modifiers: 2 };
+        let pl = KeyPayload {
+            usage_page: 7,
+            usage: 4,
+            modifiers: 2,
+        };
         let payload_bytes = pl.into_bytes();
-        let packet = Packet { kind: Kind::KeyDown, time_us: 0, seq: 1, flags: 0, payload: payload_bytes };
+        let packet = Packet {
+            kind: Kind::KeyDown,
+            time_us: 0,
+            seq: 1,
+            flags: 0,
+            payload: payload_bytes,
+        };
         let bytes = packet.to_bytes();
         let back = Packet::from_bytes(&bytes).unwrap();
         let pl2 = KeyPayload::from_bytes(&back.payload);
@@ -303,14 +340,20 @@ mod tests {
 
     #[test]
     fn rejects_short_buffer() {
-        assert_eq!(Packet::from_bytes(&[0u8; 31]).unwrap_err(), DecodeError::ShortBuffer);
+        assert_eq!(
+            Packet::from_bytes(&[0u8; 31]).unwrap_err(),
+            DecodeError::ShortBuffer
+        );
     }
 
     #[test]
     fn rejects_unknown_kind() {
         let mut bytes = [0u8; 32];
         bytes[0] = 0xFF;
-        assert!(matches!(Packet::from_bytes(&bytes).unwrap_err(), DecodeError::UnknownKind(0xFF)));
+        assert!(matches!(
+            Packet::from_bytes(&bytes).unwrap_err(),
+            DecodeError::UnknownKind(0xFF)
+        ));
     }
 
     #[test]
@@ -318,7 +361,10 @@ mod tests {
         let p = make_pencil_packet();
         let mut bytes = p.to_bytes();
         bytes[13] = 0b0000_0100; // set a reserved bit
-        assert_eq!(Packet::from_bytes(&bytes).unwrap_err(), DecodeError::ReservedBitsSet);
+        assert_eq!(
+            Packet::from_bytes(&bytes).unwrap_err(),
+            DecodeError::ReservedBitsSet
+        );
     }
 
     #[test]
@@ -326,14 +372,23 @@ mod tests {
         for kind_byte in [0x01u8, 0x02, 0x03, 0x10, 0x11, 0x12, 0x20, 0x21, 0x22] {
             let mut bytes = [0u8; 32];
             bytes[0] = kind_byte;
-            assert!(Packet::from_bytes(&bytes).is_ok(), "kind {kind_byte:#04x} should parse");
+            assert!(
+                Packet::from_bytes(&bytes).is_ok(),
+                "kind {kind_byte:#04x} should parse"
+            );
         }
     }
 
     #[test]
     fn zero_seq_is_valid() {
         // seq == 0 is a valid first packet
-        let p = Packet { kind: Kind::TouchBegin, time_us: 0, seq: 0, flags: 0, payload: [0; 18] };
+        let p = Packet {
+            kind: Kind::TouchBegin,
+            time_us: 0,
+            seq: 0,
+            flags: 0,
+            payload: [0; 18],
+        };
         let bytes = p.to_bytes();
         let back = Packet::from_bytes(&bytes).unwrap();
         assert_eq!(back.seq, 0);

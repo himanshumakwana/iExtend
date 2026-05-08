@@ -128,8 +128,7 @@ pub fn copy_host_to_nvenc_input(
     }
 
     let lib: Container<LibcudaApi> =
-        unsafe { Container::load("libcuda.so.1") }
-            .map_err(CudaError::NotInstalled)?;
+        unsafe { Container::load("libcuda.so.1") }.map_err(CudaError::NotInstalled)?;
 
     // Initialise the CUDA driver (no-op if already initialised).
     let res = unsafe { lib.cuInit(0) };

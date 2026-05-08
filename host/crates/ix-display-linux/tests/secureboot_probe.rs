@@ -3,7 +3,7 @@
 //! These tests use the `SecureBootProbe` trait to inject synthetic EFI-variable
 //! byte payloads without touching `/sys/firmware/efi/efivars/`.
 
-use ix_display_linux::secureboot::{SecureBootProbe, is_secureboot_enabled};
+use ix_display_linux::secureboot::{is_secureboot_enabled, SecureBootProbe};
 
 // ---------------------------------------------------------------------------
 // Fake probe
@@ -30,7 +30,7 @@ fn efi_var_present_and_enabled_returns_true() {
     let p = FakeProbe {
         var_bytes: Some(vec![
             0x07, 0x00, 0x00, 0x00, // EFI attribute word (NV | BS | RT)
-            0x01,                    // SecureBoot value: 1 = enabled
+            0x01, // SecureBoot value: 1 = enabled
         ]),
     };
     assert!(is_secureboot_enabled(&p));

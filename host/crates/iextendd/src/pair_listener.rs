@@ -33,8 +33,7 @@ pub async fn spawn(pin: String) -> Result<(u16, tokio::task::JoinHandle<()>)> {
     info!(port, "pairing listener bound");
 
     let handle = tokio::spawn(async move {
-        let deadline =
-            tokio::time::Instant::now() + std::time::Duration::from_secs(60);
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(60);
         let mut server = PairingServer::new(&pin);
 
         loop {

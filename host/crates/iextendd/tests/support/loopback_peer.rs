@@ -29,8 +29,7 @@
 
 use anyhow::{Context, Result};
 use ix_codec::{
-    CodecError, ColorSpace, EncodedSlice, Encoder, PeerCaps, PeerKind,
-    Profile, SharedConfig,
+    CodecError, ColorSpace, EncodedSlice, Encoder, PeerCaps, PeerKind, Profile, SharedConfig,
 };
 use ix_display::{DamageRect, GpuFrame, GpuFrameKind};
 use std::sync::Arc;
@@ -172,13 +171,10 @@ mod tests {
         let buf = painter.paint(42_000).to_vec();
         pipeline.send_frame(&buf, w, h).await.expect("send frame");
 
-        let frame = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            pipeline.recv_frame(),
-        )
-        .await
-        .expect("timeout")
-        .expect("no frame");
+        let frame = tokio::time::timeout(std::time::Duration::from_secs(5), pipeline.recv_frame())
+            .await
+            .expect("timeout")
+            .expect("no frame");
 
         assert!(!frame.rgba.is_empty(), "decoded frame should have data");
     }

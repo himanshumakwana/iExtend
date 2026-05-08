@@ -51,14 +51,7 @@ impl Advertiser {
         let fullname = format!("{instance}.{SERVICE_TYPE}");
         let host = format!("{instance}.local.");
 
-        let info = ServiceInfo::new(
-            SERVICE_TYPE,
-            &instance,
-            &host,
-            ifaddrs,
-            port,
-            Some(props),
-        )?;
+        let info = ServiceInfo::new(SERVICE_TYPE, &instance, &host, ifaddrs, port, Some(props))?;
         daemon.register(info)?;
         info!(service = %fullname, port, "iExtend mDNS service registered");
         Ok(Self { daemon, fullname })

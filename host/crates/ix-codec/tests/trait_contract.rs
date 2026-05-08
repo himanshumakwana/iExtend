@@ -87,12 +87,18 @@ fn force_keyframe_takes_effect_on_next_encode() {
 
     // First encode: no keyframe requested yet.
     let s = e.encode(&frame, &[]).unwrap();
-    assert!(!s.is_keyframe, "first encode without force should not be keyframe");
+    assert!(
+        !s.is_keyframe,
+        "first encode without force should not be keyframe"
+    );
 
     // Request keyframe.
     e.force_keyframe();
     let s = e.encode(&frame, &[]).unwrap();
-    assert!(s.is_keyframe, "encode after force_keyframe must be keyframe");
+    assert!(
+        s.is_keyframe,
+        "encode after force_keyframe must be keyframe"
+    );
 
     // Next encode: keyframe flag should have been consumed.
     let s = e.encode(&frame, &[]).unwrap();
@@ -119,14 +125,20 @@ fn negotiate_with_m4_peer_returns_valid_profile() {
     let n = e.negotiate(&peer);
     // NullEncoder always returns HevcMain10; real impl would return Av1Main10.
     // We're testing the trait shape, not the negotiation logic.
-    assert!(matches!(n.profile, Profile::HevcMain10 | Profile::Av1Main10));
+    assert!(matches!(
+        n.profile,
+        Profile::HevcMain10 | Profile::Av1Main10
+    ));
 }
 
 #[test]
 fn encode_produces_non_empty_data() {
     let mut e = null_encoder(EncoderKind::X264SoftwareUlllSw);
     let s = e.encode(&dummy_frame(), &[]).unwrap();
-    assert!(!s.data.is_empty(), "encoded slice must contain at least one byte");
+    assert!(
+        !s.data.is_empty(),
+        "encoded slice must contain at least one byte"
+    );
 }
 
 #[test]
@@ -166,7 +178,9 @@ mod sw_tests {
         let frame = dummy_frame();
 
         enc.force_keyframe();
-        let s = enc.encode(&frame, &[]).expect("encode after force_keyframe");
+        let s = enc
+            .encode(&frame, &[])
+            .expect("encode after force_keyframe");
         // openh264 may not always honour the IDR request on frame 0; we check
         // that the flag was consumed (next call is not keyframe).
         let s2 = enc.encode(&frame, &[]).expect("second encode");
@@ -179,8 +193,8 @@ mod sw_tests {
         let mut enc = X264Sw::new(cfg).expect("x264sw init");
         enc.set_bitrate(10_000);
         enc.set_bitrate(80_000);
-        enc.set_bitrate(1);           // below floor — should clamp
-        enc.set_bitrate(999_999);     // above ceiling — should clamp
+        enc.set_bitrate(1); // below floor — should clamp
+        enc.set_bitrate(999_999); // above ceiling — should clamp
     }
 
     #[test]

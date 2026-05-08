@@ -48,11 +48,7 @@ fn wrong_pin_diverges() {
     let id_a = Identity::new(b"iextend.ipad");
     let id_b = Identity::new(b"iextend.host");
 
-    let (sa, msg_a) = Spake2::<Ed25519Group>::start_a(
-        &Password::new(b"4729"),
-        &id_a,
-        &id_b,
-    );
+    let (sa, msg_a) = Spake2::<Ed25519Group>::start_a(&Password::new(b"4729"), &id_a, &id_b);
     let (sb, msg_b) = Spake2::<Ed25519Group>::start_b(
         &Password::new(b"0000"), // attacker's wrong guess
         &id_a,

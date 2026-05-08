@@ -21,8 +21,8 @@
 mod advertise;
 mod browse;
 
-pub use advertise::{Advertiser, AdvertiseError};
-pub use browse::{Browser, BrowseError, DiscoveredPeer};
+pub use advertise::{AdvertiseError, Advertiser};
+pub use browse::{BrowseError, Browser, DiscoveredPeer};
 
 /// Service type used by both halves of pairing.
 pub const SERVICE_TYPE: &str = "_iextend._tcp.local.";

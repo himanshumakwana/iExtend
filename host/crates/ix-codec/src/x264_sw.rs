@@ -19,8 +19,8 @@ use crate::{
     CodecError, ColorSpace, EncodedSlice, Encoder, EncoderKind, Negotiated, PeerCaps, Profile,
 };
 use ix_display::{DamageRect, GpuFrame};
-use openh264::encoder::{EncoderConfig, RateControlMode, UsageType};
 use openh264::encoder::Encoder as Oh264Encoder;
+use openh264::encoder::{EncoderConfig, RateControlMode, UsageType};
 use openh264::formats::YUVBuffer;
 use openh264::OpenH264API;
 use std::time::Instant;
@@ -114,7 +114,11 @@ impl Encoder for X264Sw {
         }
     }
 
-    fn encode(&mut self, src: &GpuFrame, _dirty: &[DamageRect]) -> Result<EncodedSlice, CodecError> {
+    fn encode(
+        &mut self,
+        src: &GpuFrame,
+        _dirty: &[DamageRect],
+    ) -> Result<EncodedSlice, CodecError> {
         let is_kf = self.should_keyframe();
 
         let yuv = Self::to_yuv_buffer(src);

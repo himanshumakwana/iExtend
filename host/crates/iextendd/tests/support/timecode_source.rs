@@ -74,7 +74,11 @@ impl Painter {
     /// Create a new painter for the given frame dimensions.
     pub fn new(width: u32, height: u32) -> Self {
         let size = (width as usize) * (height as usize) * BPP;
-        Self { width, height, buf: vec![0u8; size] }
+        Self {
+            width,
+            height,
+            buf: vec![0u8; size],
+        }
     }
 
     /// Paint `microseconds` into the RGBA buffer and return a reference to it.
@@ -143,7 +147,7 @@ impl Painter {
                     for dy in 0..SEG_T {
                         let px_off = (by + dy) * w * BPP + (bx + dx) * BPP;
                         if px_off + 3 < buf_len {
-                            self.buf[px_off]     = 0x00;
+                            self.buf[px_off] = 0x00;
                             self.buf[px_off + 1] = 0x00;
                             self.buf[px_off + 2] = 0x00;
                             self.buf[px_off + 3] = 0xFF;
@@ -161,7 +165,7 @@ impl Painter {
                     for dx in 0..SEG_T {
                         let px_off = (by + dy) * w * BPP + (bx + dx) * BPP;
                         if px_off + 3 < buf_len {
-                            self.buf[px_off]     = 0x00;
+                            self.buf[px_off] = 0x00;
                             self.buf[px_off + 1] = 0x00;
                             self.buf[px_off + 2] = 0x00;
                             self.buf[px_off + 3] = 0xFF;
@@ -171,13 +175,27 @@ impl Painter {
             }};
         }
 
-        if segs & (1 << 6) != 0 { h_bar!(ox, oy, DIGIT_W); }                        // top
-        if segs & (1 << 5) != 0 { v_bar!(ox + DIGIT_W - SEG_T, oy, half_h); }       // top-right
-        if segs & (1 << 4) != 0 { v_bar!(ox + DIGIT_W - SEG_T, oy + half_h, half_h); } // bot-right
-        if segs & (1 << 3) != 0 { h_bar!(ox, oy + DIGIT_H - SEG_T, DIGIT_W); }      // bottom
-        if segs & (1 << 2) != 0 { v_bar!(ox, oy + half_h, half_h); }               // bot-left
-        if segs & (1 << 1) != 0 { v_bar!(ox, oy, half_h); }                        // top-left
-        if segs & (1 << 0) != 0 { h_bar!(ox, oy + half_h - SEG_T / 2, DIGIT_W); }  // middle
+        if segs & (1 << 6) != 0 {
+            h_bar!(ox, oy, DIGIT_W);
+        } // top
+        if segs & (1 << 5) != 0 {
+            v_bar!(ox + DIGIT_W - SEG_T, oy, half_h);
+        } // top-right
+        if segs & (1 << 4) != 0 {
+            v_bar!(ox + DIGIT_W - SEG_T, oy + half_h, half_h);
+        } // bot-right
+        if segs & (1 << 3) != 0 {
+            h_bar!(ox, oy + DIGIT_H - SEG_T, DIGIT_W);
+        } // bottom
+        if segs & (1 << 2) != 0 {
+            v_bar!(ox, oy + half_h, half_h);
+        } // bot-left
+        if segs & (1 << 1) != 0 {
+            v_bar!(ox, oy, half_h);
+        } // top-left
+        if segs & (1 << 0) != 0 {
+            h_bar!(ox, oy + half_h - SEG_T / 2, DIGIT_W);
+        } // middle
     }
 
     /// Read a timecode from an RGBA buffer produced by [`paint`][Self::paint].
@@ -222,8 +240,13 @@ mod tests {
         let buf = p.paint(us).to_vec();
         // The binary stripe only recovers the low 32 bits.
         let read = Painter::read(&buf, 1920, 1080).unwrap();
-        assert_eq!(read, us & 0xFFFF_FFFF,
-            "binary stripe should recover low 32 bits: expected {} got {}", us & 0xFFFF_FFFF, read);
+        assert_eq!(
+            read,
+            us & 0xFFFF_FFFF,
+            "binary stripe should recover low 32 bits: expected {} got {}",
+            us & 0xFFFF_FFFF,
+            read
+        );
     }
 
     #[test]

@@ -8,7 +8,7 @@
 // reports and synthesises Windows Ink / Pointer Input events that all modern
 // apps (Photoshop 2024+, Clip Studio, Krita 5.2+) consume natively.
 
-use crate::wire::{self, Kind, KeyPayload, PencilPayload, TouchPayload};
+use crate::wire::{self, KeyPayload, Kind, PencilPayload, TouchPayload};
 use crate::Injector;
 use std::io;
 
@@ -43,9 +43,7 @@ impl WindowsInjector {
         #[cfg(windows)]
         {
             use windows::core::PCWSTR;
-            use windows::Win32::Storage::FileSystem::{
-                FILE_ATTRIBUTE_NORMAL, FILE_GENERIC_WRITE,
-            };
+            use windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_NORMAL, FILE_GENERIC_WRITE};
             let path: Vec<u16> = "\\\\.\\iExtendStylus\0".encode_utf16().collect();
             let handle = unsafe {
                 CreateFileW(
@@ -65,7 +63,10 @@ impl WindowsInjector {
         }
         #[cfg(not(windows))]
         {
-            Err(io::Error::new(io::ErrorKind::Unsupported, "WindowsInjector only available on Windows"))
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "WindowsInjector only available on Windows",
+            ))
         }
     }
 
@@ -141,8 +142,8 @@ fn build_stylus_hid_report(pl: &PencilPayload, lift: bool) -> [u8; 18] {
     let x = pl.x.round() as i32;
     let y = pl.y.round() as i32;
     let pressure = (pl.pressure * 1024.0).round().clamp(0.0, 1024.0) as u16;
-    let tilt_x   = (pl.tilt.cos() * pl.azimuth.cos() * 9000.0).round() as i16;
-    let tilt_y   = (pl.tilt.cos() * pl.azimuth.sin() * 9000.0).round() as i16;
+    let tilt_x = (pl.tilt.cos() * pl.azimuth.cos() * 9000.0).round() as i16;
+    let tilt_y = (pl.tilt.cos() * pl.azimuth.sin() * 9000.0).round() as i16;
     let buttons: u8 = (if lift { 0 } else { 1 })  // bit 0 = tip
                     | (if pl.barrel { 2 } else { 0 })
                     | (if pl.hover  { 4 } else { 0 });
@@ -176,9 +177,14 @@ mod tests {
     #[test]
     fn stylus_report_tip_bit_set_on_contact() {
         let pl = PencilPayload {
-            x: 100.0, y: 200.0, pressure: 0.5,
-            tilt: 0.0, azimuth: 0.0, twist: 0.0,
-            barrel: false, hover: false,
+            x: 100.0,
+            y: 200.0,
+            pressure: 0.5,
+            tilt: 0.0,
+            azimuth: 0.0,
+            twist: 0.0,
+            barrel: false,
+            hover: false,
         };
         let r = build_stylus_hid_report(&pl, false /*lift=false → contact*/);
         assert_eq!(r[14] & 1, 1, "tip bit should be set on contact");
@@ -187,9 +193,14 @@ mod tests {
     #[test]
     fn stylus_report_tip_bit_clear_on_lift() {
         let pl = PencilPayload {
-            x: 0.0, y: 0.0, pressure: 0.0,
-            tilt: 0.0, azimuth: 0.0, twist: 0.0,
-            barrel: false, hover: false,
+            x: 0.0,
+            y: 0.0,
+            pressure: 0.0,
+            tilt: 0.0,
+            azimuth: 0.0,
+            twist: 0.0,
+            barrel: false,
+            hover: false,
         };
         let r = build_stylus_hid_report(&pl, true /*lift*/);
         assert_eq!(r[14] & 1, 0, "tip bit should be clear on lift");
@@ -198,9 +209,14 @@ mod tests {
     #[test]
     fn stylus_report_barrel_bit() {
         let pl = PencilPayload {
-            x: 0.0, y: 0.0, pressure: 0.5,
-            tilt: 0.0, azimuth: 0.0, twist: 0.0,
-            barrel: true, hover: false,
+            x: 0.0,
+            y: 0.0,
+            pressure: 0.5,
+            tilt: 0.0,
+            azimuth: 0.0,
+            twist: 0.0,
+            barrel: true,
+            hover: false,
         };
         let r = build_stylus_hid_report(&pl, false);
         assert_eq!(r[14] & 2, 2, "barrel bit should be set");
@@ -209,9 +225,14 @@ mod tests {
     #[test]
     fn stylus_report_coordinates_in_bytes() {
         let pl = PencilPayload {
-            x: 1000.0, y: 2000.0, pressure: 0.0,
-            tilt: 0.0, azimuth: 0.0, twist: 0.0,
-            barrel: false, hover: false,
+            x: 1000.0,
+            y: 2000.0,
+            pressure: 0.0,
+            tilt: 0.0,
+            azimuth: 0.0,
+            twist: 0.0,
+            barrel: false,
+            hover: false,
         };
         let r = build_stylus_hid_report(&pl, false);
         let x = i32::from_le_bytes(r[0..4].try_into().unwrap());
@@ -224,6 +245,9 @@ mod tests {
     fn windows_injector_new_fails_on_linux() {
         // On Linux, WindowsInjector::new() must return an error rather than panic.
         let result = WindowsInjector::new();
-        assert!(result.is_err(), "WindowsInjector should fail on non-Windows");
+        assert!(
+            result.is_err(),
+            "WindowsInjector should fail on non-Windows"
+        );
     }
 }

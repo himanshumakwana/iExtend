@@ -73,7 +73,12 @@ impl FakeSource {
         for (i, b) in buf.iter_mut().take(w as usize * h as usize).enumerate() {
             *b = (i % 256) as u8;
         }
-        Self { width: w, height: h, buf, count: 0 }
+        Self {
+            width: w,
+            height: h,
+            buf,
+            count: 0,
+        }
     }
 }
 
@@ -123,11 +128,7 @@ impl Session {
     /// Create a new session from its three components.
     ///
     /// Does not start any tasks — call [`run`][Self::run] to begin streaming.
-    pub fn new(
-        capture: Box<dyn DisplaySource>,
-        encoder: Box<dyn Encoder>,
-        peer: Peer,
-    ) -> Self {
+    pub fn new(capture: Box<dyn DisplaySource>, encoder: Box<dyn Encoder>, peer: Peer) -> Self {
         Self {
             capture: Arc::new(Mutex::new(capture)),
             encoder: Arc::new(Mutex::new(encoder)),

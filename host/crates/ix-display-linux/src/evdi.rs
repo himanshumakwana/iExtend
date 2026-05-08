@@ -88,8 +88,7 @@ impl EvdiMonitor {
     pub fn open() -> Result<Self, EvdiError> {
         // Load libevdi at runtime — no link-time dep on GPL code.
         let lib: Container<LibevdiApi> =
-            unsafe { Container::load("libevdi.so.0") }
-                .map_err(EvdiError::NotInstalled)?;
+            unsafe { Container::load("libevdi.so.0") }.map_err(EvdiError::NotInstalled)?;
 
         // Find the first /dev/evdi* device node.  The kernel module creates
         // one node per virtual monitor slot; `initial_device_count` in

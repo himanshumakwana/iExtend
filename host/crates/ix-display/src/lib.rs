@@ -39,7 +39,12 @@ impl DamageRect {
         let y = self.y.min(other.y);
         let r = (self.x + self.w).max(other.x + other.w);
         let b = (self.y + self.h).max(other.y + other.h);
-        Self { x, y, w: r - x, h: b - y }
+        Self {
+            x,
+            y,
+            w: r - x,
+            h: b - y,
+        }
     }
 }
 
@@ -56,21 +61,13 @@ pub enum GpuFrameKind {
     },
     /// Linux/X11: shared-memory CPU buffer. `addr` is the mmap'd start.
     /// Encoder may need to upload to GPU for hw encode.
-    ShmCpu {
-        addr: *mut u8,
-        stride: usize,
-    },
+    ShmCpu { addr: *mut u8, stride: usize },
     /// Windows IddCx: D3D11 texture handle (NT shared handle).
     /// Encoder imports via `OpenSharedResource1`. Truly zero-copy.
-    D3D11Shared {
-        nt_handle: u64,
-    },
+    D3D11Shared { nt_handle: u64 },
     /// Windows fallback / Linux NVIDIA proprietary: CUDA device pointer.
     /// `cuMemcpy2D` from this into the encoder's input surface.
-    CudaDevicePtr {
-        ptr: u64,
-        pitch: usize,
-    },
+    CudaDevicePtr { ptr: u64, pitch: usize },
 }
 
 // SAFETY: GpuFrame is moved between threads via SPSC ring buffer. Callers must
@@ -103,7 +100,12 @@ pub struct DisplayMode {
 
 impl Default for DisplayMode {
     fn default() -> Self {
-        Self { width: 1920, height: 1080, refresh_hz: 120, hdr: false }
+        Self {
+            width: 1920,
+            height: 1080,
+            refresh_hz: 120,
+            hdr: false,
+        }
     }
 }
 

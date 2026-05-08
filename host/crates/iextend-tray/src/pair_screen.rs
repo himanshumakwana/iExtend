@@ -43,7 +43,10 @@ impl PairScreen {
         ui.add_space(8.0);
 
         if self.expired() {
-            ui.colored_label(egui::Color32::RED, "PIN expired. Click Pair iPad to try again.");
+            ui.colored_label(
+                egui::Color32::RED,
+                "PIN expired. Click Pair iPad to try again.",
+            );
             return ui.button("Close").clicked();
         }
 
@@ -53,10 +56,8 @@ impl PairScreen {
         // Big monospaced PIN cells.
         ui.horizontal(|ui| {
             for c in self.pin.chars() {
-                let (rect, _) = ui.allocate_exact_size(
-                    egui::Vec2::new(48.0, 60.0),
-                    egui::Sense::hover(),
-                );
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::Vec2::new(48.0, 60.0), egui::Sense::hover());
                 ui.painter().rect_filled(
                     rect,
                     egui::Rounding::same(8.0),

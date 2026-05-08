@@ -18,7 +18,9 @@
 #![cfg(feature = "vaapi")]
 
 use crate::common::SharedConfig;
-use crate::{CodecError, ColorSpace, EncodedSlice, Encoder, EncoderKind, Negotiated, PeerCaps, Profile};
+use crate::{
+    CodecError, ColorSpace, EncodedSlice, Encoder, EncoderKind, Negotiated, PeerCaps, Profile,
+};
 use ix_display::{DamageRect, GpuFrame};
 
 /// VAAPI HEVC encoder handle (stub).
@@ -65,11 +67,19 @@ impl Encoder for VaapiHevc {
     fn negotiate(&mut self, peer: &PeerCaps) -> Negotiated {
         Negotiated {
             profile: Profile::HevcMain10,
-            color: if peer.supports_hdr() { ColorSpace::Bt2020Pq } else { ColorSpace::Bt709Sdr },
+            color: if peer.supports_hdr() {
+                ColorSpace::Bt2020Pq
+            } else {
+                ColorSpace::Bt709Sdr
+            },
         }
     }
 
-    fn encode(&mut self, _src: &GpuFrame, _dirty: &[DamageRect]) -> Result<EncodedSlice, CodecError> {
+    fn encode(
+        &mut self,
+        _src: &GpuFrame,
+        _dirty: &[DamageRect],
+    ) -> Result<EncodedSlice, CodecError> {
         Err(CodecError::NotAvailable("VaapiHevc stub".into()))
     }
 

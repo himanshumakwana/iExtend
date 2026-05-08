@@ -5,5 +5,5 @@
 //! is opened with `Container::load`.  No link-time dependency on either
 //! library is introduced.
 
-pub mod libevdi;
 pub mod cuda;
+pub mod libevdi;

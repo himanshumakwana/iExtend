@@ -88,19 +88,14 @@ pub struct LibcudaApi {
     cuInit: unsafe extern "C" fn(flags: c_uint) -> CUresult,
 
     /// Query the CUDA context bound to the calling thread.
-    cuCtxGetCurrent:
-        unsafe extern "C" fn(ctx: *mut CUcontext) -> CUresult,
+    cuCtxGetCurrent: unsafe extern "C" fn(ctx: *mut CUcontext) -> CUresult,
 
     /// Asynchronous 2-D memcpy.
     ///
     /// Used to copy from a host-mapped screencast buffer (srcMemoryType=HOST)
     /// into an NVENC input surface (dstMemoryType=DEVICE).
-    cuMemcpy2DAsync: unsafe extern "C" fn(
-        copy: *const CUDA_MEMCPY2D,
-        stream: CUstream,
-    ) -> CUresult,
+    cuMemcpy2DAsync: unsafe extern "C" fn(copy: *const CUDA_MEMCPY2D, stream: CUstream) -> CUresult,
 
     /// Block the CPU until all operations on `stream` have completed.
-    cuStreamSynchronize:
-        unsafe extern "C" fn(stream: CUstream) -> CUresult,
+    cuStreamSynchronize: unsafe extern "C" fn(stream: CUstream) -> CUresult,
 }

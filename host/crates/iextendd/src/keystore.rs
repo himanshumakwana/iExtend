@@ -194,9 +194,9 @@ impl PinStore {
 
     /// List all pinned iPads. Tray's "Paired devices" UI walks this.
     pub fn list(&self) -> Result<Vec<PinnedIpad>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT pair_id, pubkey, name, paired_at FROM pinned_ipads ORDER BY paired_at DESC")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT pair_id, pubkey, name, paired_at FROM pinned_ipads ORDER BY paired_at DESC",
+        )?;
         let mut out = Vec::new();
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
@@ -233,7 +233,10 @@ fn data_dir() -> PathBuf {
         return PathBuf::from(xdg).join("iextend");
     }
     if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".local").join("share").join("iextend");
+        return PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("iextend");
     }
     PathBuf::from("/tmp/iextend")
 }
@@ -257,7 +260,9 @@ mod tests {
         let path = dir.path().join("p.sqlite");
         let store = PinStore::open_at(&path).unwrap();
         let pk = [9u8; 32];
-        store.pin("11111111-1111-1111-1111-111111111111", &pk, "Aman's iPad").unwrap();
+        store
+            .pin("11111111-1111-1111-1111-111111111111", &pk, "Aman's iPad")
+            .unwrap();
         let found = store.find_by_pubkey(&pk).unwrap().unwrap();
         assert_eq!(found.pair_id, "11111111-1111-1111-1111-111111111111");
         assert_eq!(found.name, "Aman's iPad");
@@ -268,8 +273,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let store = PinStore::open_at(&dir.path().join("p.sqlite")).unwrap();
         let pk = [1u8; 32];
-        store.pin("11111111-1111-1111-1111-111111111111", &pk, "x").unwrap();
-        assert!(store.forget("11111111-1111-1111-1111-111111111111").unwrap());
+        store
+            .pin("11111111-1111-1111-1111-111111111111", &pk, "x")
+            .unwrap();
+        assert!(store
+            .forget("11111111-1111-1111-1111-111111111111")
+            .unwrap());
         assert!(store.find_by_pubkey(&pk).unwrap().is_none());
     }
 

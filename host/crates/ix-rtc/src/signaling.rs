@@ -106,9 +106,7 @@ pub async fn in_process_exchange(
 ) -> Result<(), RtcError> {
     let offer = offerer.create_offer().await?;
     // Both peers trust synthetic certs in-process.
-    let answer = answerer
-        .create_answer_for(offer, b"synthetic_cert")
-        .await?;
+    let answer = answerer.create_answer_for(offer, b"synthetic_cert").await?;
     offerer.apply_answer(answer, b"synthetic_cert").await?;
     Ok(())
 }

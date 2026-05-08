@@ -18,17 +18,15 @@ use std::os::windows::io::RawHandle;
 
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_FLAG_OVERLAPPED, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    OPEN_EXISTING,
+    CreateFileW, FILE_FLAG_OVERLAPPED, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
 use windows::Win32::System::IO::DeviceIoControl;
 
 use crate::error::{Error, Result};
 use crate::iddcx_bindings::{
-    GUID, IEXDD_FRAME_HEADER, IEXDD_FRAME_RELEASE, IEXDD_HELLO,
-    IEXDD_MAX_DIRTY_RECTS, IEXDD_PROTOCOL_VERSION, IEXDD_STATS,
-    IOCTL_IEXDD_HELLO, IOCTL_IEXDD_PULL_FRAME, IOCTL_IEXDD_QUERY_STATS,
-    IOCTL_IEXDD_RELEASE_FRAME, RECT,
+    GUID, IEXDD_FRAME_HEADER, IEXDD_FRAME_RELEASE, IEXDD_HELLO, IEXDD_MAX_DIRTY_RECTS,
+    IEXDD_PROTOCOL_VERSION, IEXDD_STATS, IOCTL_IEXDD_HELLO, IOCTL_IEXDD_PULL_FRAME,
+    IOCTL_IEXDD_QUERY_STATS, IOCTL_IEXDD_RELEASE_FRAME, RECT,
 };
 
 // ---------------------------------------------------------------------------
@@ -118,14 +116,14 @@ impl Connection {
 
         let input = IEXDD_HELLO {
             ProtocolVersion: IEXDD_PROTOCOL_VERSION,
-            ClientPid:       std::process::id(),
-            ClientNonce:     nonce,
+            ClientPid: std::process::id(),
+            ClientNonce: nonce,
         };
 
         let mut output = IEXDD_HELLO {
             ProtocolVersion: 0,
-            ClientPid:       0,
-            ClientNonce:     GUID::default(),
+            ClientPid: 0,
+            ClientNonce: GUID::default(),
         };
 
         let returned = self.ioctl_buffered(
@@ -163,8 +161,8 @@ impl Connection {
     /// dedicated `frame_pump` thread only.
     pub fn pull_frame(&self) -> Result<(IEXDD_FRAME_HEADER, Vec<RECT>)> {
         // Allocate enough buffer for the header + maximum dirty rects.
-        let max_buf = mem::size_of::<IEXDD_FRAME_HEADER>()
-            + IEXDD_MAX_DIRTY_RECTS * mem::size_of::<RECT>();
+        let max_buf =
+            mem::size_of::<IEXDD_FRAME_HEADER>() + IEXDD_MAX_DIRTY_RECTS * mem::size_of::<RECT>();
 
         let mut buf: Vec<u8> = vec![0u8; max_buf];
 
@@ -181,9 +179,8 @@ impl Connection {
         }
 
         // SAFETY: buf is large enough and initialised by the kernel.
-        let header: IEXDD_FRAME_HEADER = unsafe {
-            std::ptr::read_unaligned(buf.as_ptr() as *const IEXDD_FRAME_HEADER)
-        };
+        let header: IEXDD_FRAME_HEADER =
+            unsafe { std::ptr::read_unaligned(buf.as_ptr() as *const IEXDD_FRAME_HEADER) };
 
         let mut rects = Vec::new();
         let dirty_count = header.DirtyRectCount.min(IEXDD_MAX_DIRTY_RECTS as u32) as usize;
@@ -195,9 +192,8 @@ impl Connection {
             // written by the kernel.
             for i in 0..dirty_count {
                 let offset = rects_offset + i * mem::size_of::<RECT>();
-                let r: RECT = unsafe {
-                    std::ptr::read_unaligned(buf[offset..].as_ptr() as *const RECT)
-                };
+                let r: RECT =
+                    unsafe { std::ptr::read_unaligned(buf[offset..].as_ptr() as *const RECT) };
                 rects.push(r);
             }
         }
@@ -208,7 +204,9 @@ impl Connection {
     /// Post a frame release to the kernel, freeing the in-flight slot and
     /// allowing WDDM to reclaim the swapchain buffer.
     pub fn release_frame(&self, acquire_seq: u64) -> Result<()> {
-        let input = IEXDD_FRAME_RELEASE { AcquireSeq: acquire_seq };
+        let input = IEXDD_FRAME_RELEASE {
+            AcquireSeq: acquire_seq,
+        };
 
         self.ioctl_buffered(
             IOCTL_IEXDD_RELEASE_FRAME,
@@ -242,11 +240,11 @@ impl Connection {
 
     fn ioctl_buffered(
         &self,
-        code:        u32,
-        in_buf:      *const c_void,
-        in_size:     u32,
-        out_buf:     *mut c_void,
-        out_size:    u32,
+        code: u32,
+        in_buf: *const c_void,
+        in_size: u32,
+        out_buf: *mut c_void,
+        out_size: u32,
     ) -> Result<u32> {
         let mut returned: u32 = 0;
 
@@ -258,7 +256,11 @@ impl Connection {
                 code,
                 if in_buf.is_null() { None } else { Some(in_buf) },
                 in_size,
-                if out_buf.is_null() { None } else { Some(out_buf) },
+                if out_buf.is_null() {
+                    None
+                } else {
+                    Some(out_buf)
+                },
                 out_size,
                 Some(&mut returned),
                 None, // no OVERLAPPED — synchronous

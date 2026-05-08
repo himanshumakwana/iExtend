@@ -11,16 +11,16 @@ pub mod pairing;
 pub mod replay;
 
 // ── Plan 5 modules (peer, signaling, channels, bitrate, heartbeat) ─────────
+/// Transport-CC → encoder bitrate controller (proportional, deadband, slew).
+pub mod bitrate_controller;
+/// Typed input + control DataChannel wrappers.
+pub mod channels;
+/// 250 ms heartbeat; 4 missed = 1 s disconnect detection.
+pub mod heartbeat;
 /// WebRTC peer connection — owns video track and DataChannels.
 pub mod peer;
 /// SDP offer/answer + cert-pinning hook.
 pub mod signaling;
-/// Typed input + control DataChannel wrappers.
-pub mod channels;
-/// Transport-CC → encoder bitrate controller (proportional, deadband, slew).
-pub mod bitrate_controller;
-/// 250 ms heartbeat; 4 missed = 1 s disconnect detection.
-pub mod heartbeat;
 
 pub use peer::Peer;
 

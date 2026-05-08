@@ -60,7 +60,11 @@ mod tests {
         let pi = std::f32::consts::PI;
         let q = q16_from_f32(pi);
         let back = q16_to_f32(q);
-        assert!((pi - back).abs() < 1.0 / 65_536.0, "pi roundtrip delta too large: {}", (pi - back).abs());
+        assert!(
+            (pi - back).abs() < 1.0 / 65_536.0,
+            "pi roundtrip delta too large: {}",
+            (pi - back).abs()
+        );
     }
 
     #[test]
@@ -88,7 +92,11 @@ mod tests {
         let v = 0.25f32;
         let q = q16_i16_from_f32(v);
         let back = q16_i16_to_f32(q);
-        assert!((v - back).abs() < 1.0 / 65_536.0, "0.25 delta: {}", (v - back).abs());
+        assert!(
+            (v - back).abs() < 1.0 / 65_536.0,
+            "0.25 delta: {}",
+            (v - back).abs()
+        );
     }
 
     #[test]

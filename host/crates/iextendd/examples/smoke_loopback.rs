@@ -138,9 +138,9 @@ fn build_encoder(
 
     let result: Result<Box<dyn Encoder>, ix_codec::CodecError> = match kind {
         X264SoftwareUlllSw => try_software_encoder_inner(cfg.clone()),
-        _ => Err(ix_codec::CodecError::NotAvailable(
-            format!("{kind:?} requires a GPU SDK not present on this host"),
-        )),
+        _ => Err(ix_codec::CodecError::NotAvailable(format!(
+            "{kind:?} requires a GPU SDK not present on this host"
+        ))),
     };
 
     match result {
@@ -159,9 +159,7 @@ fn try_software_encoder(
     try_software_encoder_inner(cfg).map_err(Into::into)
 }
 
-fn try_software_encoder_inner(
-    cfg: SharedConfig,
-) -> Result<Box<dyn Encoder>, ix_codec::CodecError> {
+fn try_software_encoder_inner(cfg: SharedConfig) -> Result<Box<dyn Encoder>, ix_codec::CodecError> {
     use ix_codec::x264_sw::X264Sw;
     Ok(Box::new(X264Sw::new(cfg)?))
 }

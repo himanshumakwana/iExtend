@@ -63,8 +63,7 @@ fn get_primary_output() -> Result<IDXGIOutput> {
     let factory: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }
         .context("CreateDXGIFactory1 failed — DXGI not available")?;
 
-    let adapter = unsafe { factory.EnumAdapters1(0) }
-        .context("no DXGI adapters found")?;
+    let adapter = unsafe { factory.EnumAdapters1(0) }.context("no DXGI adapters found")?;
 
     let output = unsafe { adapter.EnumOutputs(0) };
     match output {

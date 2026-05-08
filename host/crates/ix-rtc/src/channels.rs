@@ -163,12 +163,10 @@ impl ControlChannel {
     /// Serialize `msg` to JSON and send as raw bytes. Used by the real
     /// webrtc-rs `RTCDataChannel::send(&Bytes)` call path.
     pub fn send_raw_bytes(msg: &ControlMessage) -> Result<Bytes, RtcError> {
-        serde_json::to_vec(msg)
-            .map(Bytes::from)
-            .map_err(|e| {
-                warn!("control message serialization error: {e}");
-                RtcError::NotConnected
-            })
+        serde_json::to_vec(msg).map(Bytes::from).map_err(|e| {
+            warn!("control message serialization error: {e}");
+            RtcError::NotConnected
+        })
     }
 
     /// Deserialize a raw-bytes control message.
@@ -202,7 +200,10 @@ mod tests {
     #[tokio::test]
     async fn control_round_trip() {
         let ch = ControlChannel::new();
-        let msg = ControlMessage::Heartbeat { seq: 42, sent_us: 12345 };
+        let msg = ControlMessage::Heartbeat {
+            seq: 42,
+            sent_us: 12345,
+        };
         ch.send(msg.clone()).await.unwrap();
         let received = ch.recv().await.unwrap();
         assert_eq!(received, msg);
@@ -219,7 +220,11 @@ mod tests {
 
     #[test]
     fn control_message_json_round_trip() {
-        let msg = ControlMessage::HeartbeatAck { ack_seq: 1, recv_us: 100, send_us: 200 };
+        let msg = ControlMessage::HeartbeatAck {
+            ack_seq: 1,
+            recv_us: 100,
+            send_us: 200,
+        };
         let bytes = ControlChannel::send_raw_bytes(&msg).unwrap();
         let parsed = ControlChannel::parse_raw_bytes(&bytes).unwrap();
         assert_eq!(parsed, msg);

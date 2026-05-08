@@ -30,23 +30,23 @@
 //!    might cross-check.
 
 #[cfg(unix)]
+pub mod detect;
+#[cfg(unix)]
 pub mod evdi;
+#[cfg(unix)]
+mod ffi;
+#[cfg(unix)]
+pub mod nvidia_cuda;
+#[cfg(unix)]
+pub mod secureboot;
 #[cfg(unix)]
 pub mod wayland;
 #[cfg(unix)]
 pub mod x11;
-#[cfg(unix)]
-pub mod secureboot;
-#[cfg(unix)]
-pub mod nvidia_cuda;
-#[cfg(unix)]
-pub mod detect;
-#[cfg(unix)]
-mod ffi;
 
 // Re-export the primary types callers need.
 #[cfg(unix)]
-pub use detect::{Backend, EnvProbe, StdEnv, detect_backend};
+pub use detect::{detect_backend, Backend, EnvProbe, StdEnv};
 
 #[cfg(unix)]
 use crossbeam::queue::ArrayQueue;
@@ -113,12 +113,8 @@ impl LinuxDisplaySource {
         }
 
         let backend = match env_backend {
-            Backend::Wayland => LinuxBackend::Wayland(
-                wayland::WaylandCapture::new(out.clone()),
-            ),
-            Backend::X11 => LinuxBackend::X11(
-                x11::X11Capture::new(out.clone()),
-            ),
+            Backend::Wayland => LinuxBackend::Wayland(wayland::WaylandCapture::new(out.clone())),
+            Backend::X11 => LinuxBackend::X11(x11::X11Capture::new(out.clone())),
             Backend::None => unreachable!(),
         };
 
@@ -132,18 +128,19 @@ impl LinuxDisplaySource {
 
 #[cfg(unix)]
 impl DisplaySource for LinuxDisplaySource {
-    fn create_virtual_monitor(
-        &mut self,
-        mode: DisplayMode,
-    ) -> Result<MonitorHandle, DisplayError> {
-        let mut mon = evdi::EvdiMonitor::open()
-            .map_err(|e| DisplayError::DriverMissing(e.to_string()))?;
+    fn create_virtual_monitor(&mut self, mode: DisplayMode) -> Result<MonitorHandle, DisplayError> {
+        let mut mon =
+            evdi::EvdiMonitor::open().map_err(|e| DisplayError::DriverMissing(e.to_string()))?;
         mon.connect(mode.width, mode.height, mode.refresh_hz)
             .map_err(|e| DisplayError::Backend(e.to_string()))?;
         let handle = MonitorHandle(0); // evdi handle is opaque; we own it via mon
         self.monitor = Some(mon);
-        info!(width = mode.width, height = mode.height, hz = mode.refresh_hz,
-              "virtual monitor created");
+        info!(
+            width = mode.width,
+            height = mode.height,
+            hz = mode.refresh_hz,
+            "virtual monitor created"
+        );
         Ok(handle)
     }
 
@@ -176,8 +173,6 @@ pub enum LinuxError {
     Evdi(#[from] evdi::EvdiError),
     #[error(transparent)]
     X11(#[from] x11::X11Error),
-    #[error(
-        "no graphical session detected (neither WAYLAND_DISPLAY nor DISPLAY is set)"
-    )]
+    #[error("no graphical session detected (neither WAYLAND_DISPLAY nor DISPLAY is set)")]
     NoCompositor,
 }

@@ -90,7 +90,7 @@ enum BuildConfig {
 impl BuildConfig {
     fn as_str(self) -> &'static str {
         match self {
-            BuildConfig::Debug   => "Debug",
+            BuildConfig::Debug => "Debug",
             BuildConfig::Release => "Release",
         }
     }
@@ -117,12 +117,12 @@ fn main() -> Result<()> {
         Cmd::InstallWindowsDriver { config, reload } => {
             install_windows_driver(&workspace_root, config, reload)
         }
-        Cmd::SignDriverTest { config, cert_name, timestamp } => {
-            sign_driver_test(&workspace_root, config, &cert_name, &timestamp)
-        }
-        Cmd::Trace { etl, restart } => {
-            trace_driver(&etl, restart)
-        }
+        Cmd::SignDriverTest {
+            config,
+            cert_name,
+            timestamp,
+        } => sign_driver_test(&workspace_root, config, &cert_name, &timestamp),
+        Cmd::Trace { etl, restart } => trace_driver(&etl, restart),
     }
 }
 
@@ -188,13 +188,16 @@ fn build_windows_driver(workspace: &Path, config: BuildConfig, test_sign: bool) 
             "/p:Platform=x64",
             &format!("/p:SignMode={}", sign_mode),
             "/p:TestCertificate=iExtend Dev",
-            "/m",        // parallel build
+            "/m", // parallel build
             "/nologo",
             "/clp:ForceNoAlign;Summary",
         ])?;
 
         if !status.success() {
-            bail!("MSBuild failed with exit code {}", status.code().unwrap_or(-1));
+            bail!(
+                "MSBuild failed with exit code {}",
+                status.code().unwrap_or(-1)
+            );
         }
 
         let out = driver_out_dir(workspace, config);
@@ -240,7 +243,9 @@ fn install_windows_driver(workspace: &Path, config: BuildConfig, reload: bool) -
             .context("devcon install")?
             .check("devcon install")?;
 
-        println!("[xtask] Driver installed. Check ms-settings:display for 'iExtend Virtual Display'.");
+        println!(
+            "[xtask] Driver installed. Check ms-settings:display for 'iExtend Virtual Display'."
+        );
         Ok(())
     }
 }
@@ -252,7 +257,7 @@ fn install_windows_driver(workspace: &Path, config: BuildConfig, reload: bool) -
 #[allow(unused_variables, dead_code)]
 fn sign_driver_test(
     workspace: &Path,
-    config:    BuildConfig,
+    config: BuildConfig,
     cert_name: &str,
     timestamp: &str,
 ) -> Result<()> {
@@ -265,8 +270,7 @@ fn sign_driver_test(
     #[cfg(target_os = "windows")]
     {
         // Guard: refuse to sign if test signing isn't enabled.
-        let bcdedit = run_cmd("bcdedit", &[])
-            .context("bcdedit")?;
+        let bcdedit = run_cmd("bcdedit", &[]).context("bcdedit")?;
         let output = String::from_utf8_lossy(&bcdedit.stdout_bytes);
         if !output.to_lowercase().contains("testsigning") {
             bail!(
@@ -291,14 +295,21 @@ fn sign_driver_test(
 
         println!("[xtask] Signing {} and {}...", sys.display(), cat.display());
 
-        run_cmd("signtool", &[
-            "sign", "/v",
-            "/s", "PrivateCertStore",
-            "/n", cert_name,
-            "/t", timestamp,
-            sys.to_str().unwrap(),
-            cat.to_str().unwrap(),
-        ])
+        run_cmd(
+            "signtool",
+            &[
+                "sign",
+                "/v",
+                "/s",
+                "PrivateCertStore",
+                "/n",
+                cert_name,
+                "/t",
+                timestamp,
+                sys.to_str().unwrap(),
+                cat.to_str().unwrap(),
+            ],
+        )
         .context("signtool")?
         .check("signtool sign")?;
 
@@ -323,7 +334,7 @@ fn trace_driver(etl: &Path, restart: bool) -> Result<()> {
     {
         // WPP GUID from Trace.h: {B2A6B7C1-3E4D-5F60-8192-A3B4C5D6E7F8}
         const WPP_GUID: &str = "{B2A6B7C1-3E4D-5F60-8192-A3B4C5D6E7F8}";
-        const SESSION:  &str = "iExtendTrace";
+        const SESSION: &str = "iExtendTrace";
 
         require_admin()?;
 
@@ -333,13 +344,14 @@ fn trace_driver(etl: &Path, restart: bool) -> Result<()> {
 
         let etl_str = etl.to_str().context("ETL path not UTF-8")?;
 
-        run_cmd("tracelog", &[
-            "-start", SESSION,
-            "-guid", WPP_GUID,
-            "-f",    etl_str,
-            "-level", "5",       // TRACE_LEVEL_VERBOSE
-            "-flag",  "0xFFFF",  // all bits
-        ])
+        run_cmd(
+            "tracelog",
+            &[
+                "-start", SESSION, "-guid", WPP_GUID, "-f", etl_str, "-level",
+                "5", // TRACE_LEVEL_VERBOSE
+                "-flag", "0xFFFF", // all bits
+            ],
+        )
         .context("tracelog -start")?
         .check("tracelog -start")?;
 
@@ -395,7 +407,7 @@ fn run_cmd(program: &str, args: &[&str]) -> Result<CmdResult> {
 
 #[allow(dead_code)]
 struct CmdResult {
-    status:       ExitStatus,
+    status: ExitStatus,
     stdout_bytes: Vec<u8>,
     stderr_bytes: Vec<u8>,
 }
@@ -420,12 +432,21 @@ fn msbuild(args: &[&str]) -> Result<ExitStatus> {
     let vswhere = r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe";
     let msbuild_path = if Path::new(vswhere).exists() {
         let out = Command::new(vswhere)
-            .args(["-latest", "-requires", "Microsoft.Component.MSBuild",
-                   "-find", "MSBuild\\**\\Bin\\MSBuild.exe"])
+            .args([
+                "-latest",
+                "-requires",
+                "Microsoft.Component.MSBuild",
+                "-find",
+                "MSBuild\\**\\Bin\\MSBuild.exe",
+            ])
             .output()
             .context("vswhere")?;
         let s = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-        if s.is_empty() { "msbuild.exe".into() } else { s }
+        if s.is_empty() {
+            "msbuild.exe".into()
+        } else {
+            s
+        }
     } else {
         "msbuild.exe".into()
     };

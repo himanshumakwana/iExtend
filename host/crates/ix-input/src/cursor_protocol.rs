@@ -40,9 +40,7 @@ pub enum ControlMsg {
     /// Tell the iPad whether the host-rendered cursor tip should be visible.
     /// iPad sends `{ tip: false }` when the live-screen is front-most so it
     /// can draw its own reprojected tip at zero latency.
-    SetHostCursorVisible {
-        tip: bool,
-    },
+    SetHostCursorVisible { tip: bool },
 }
 
 /// Samples the OS cursor and emits [`ControlMsg::Cursor`] when changed.
@@ -50,9 +48,9 @@ pub enum ControlMsg {
 /// Call [`CursorEmitter::tick`] once per capture frame.  Returns `None` when
 /// nothing changed (same position and same sprite).
 pub struct CursorEmitter {
-    last_pos:    (f32, f32),
+    last_pos: (f32, f32),
     last_sprite: u32,
-    seq:         u32,
+    seq: u32,
 }
 
 impl Default for CursorEmitter {
@@ -63,7 +61,11 @@ impl Default for CursorEmitter {
 
 impl CursorEmitter {
     pub fn new() -> Self {
-        Self { last_pos: (-1.0, -1.0), last_sprite: u32::MAX, seq: 0 }
+        Self {
+            last_pos: (-1.0, -1.0),
+            last_sprite: u32::MAX,
+            seq: 0,
+        }
     }
 
     /// Sample the OS cursor; return a [`ControlMsg::Cursor`] if position or
@@ -74,12 +76,15 @@ impl CursorEmitter {
         let ts = now_micros();
 
         if (x, y) != self.last_pos || sprite != self.last_sprite {
-            self.last_pos    = (x, y);
+            self.last_pos = (x, y);
             self.last_sprite = sprite;
-            self.seq        += 1;
+            self.seq += 1;
             Some(ControlMsg::Cursor {
-                x, y, sprite_id: sprite,
-                hotspot_x: 0.0, hotspot_y: 0.0,
+                x,
+                y,
+                sprite_id: sprite,
+                hotspot_x: 0.0,
+                hotspot_y: 0.0,
                 ts_us: ts,
             })
         } else {
@@ -144,12 +149,18 @@ mod tests {
     #[test]
     fn cursor_msg_serialises_to_json() {
         let msg = ControlMsg::Cursor {
-            x: 100.0, y: 200.0, sprite_id: 1,
-            hotspot_x: 0.0, hotspot_y: 0.0,
+            x: 100.0,
+            y: 200.0,
+            sprite_id: 1,
+            hotspot_x: 0.0,
+            hotspot_y: 0.0,
             ts_us: 42_000,
         };
         let json = serde_json::to_string(&msg).unwrap();
-        assert!(json.contains("\"type\":\"cursor\""), "type field present: {json}");
+        assert!(
+            json.contains("\"type\":\"cursor\""),
+            "type field present: {json}"
+        );
         assert!(json.contains("\"x\":100.0"), "x present: {json}");
     }
 
@@ -177,9 +188,12 @@ mod tests {
     fn emitter_suppresses_duplicate_positions() {
         let mut e = CursorEmitter::new();
         e.tick(); // first tick — emits
-        // Second tick with same underlying cursor position (stub always 0,0)
-        // → should suppress.
+                  // Second tick with same underlying cursor position (stub always 0,0)
+                  // → should suppress.
         let msg = e.tick();
-        assert!(msg.is_none(), "duplicate position should produce no message");
+        assert!(
+            msg.is_none(),
+            "duplicate position should produce no message"
+        );
     }
 }

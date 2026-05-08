@@ -9,7 +9,7 @@
 //
 // Run: `cargo test --test wire_codec_corpus`
 
-use ix_input::wire::{Kind, KeyPayload, Packet, PencilPayload, TouchPayload, PACKET_LEN};
+use ix_input::wire::{KeyPayload, Kind, Packet, PencilPayload, TouchPayload, PACKET_LEN};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -73,9 +73,14 @@ fn pencil_move_round_trip() {
 #[test]
 fn pencil_barrel_hover_flags() {
     let pl = PencilPayload {
-        x: 0.0, y: 0.0,
-        pressure: 0.0, tilt: 0.0, azimuth: 0.0, twist: 0.0,
-        barrel: true, hover: true,
+        x: 0.0,
+        y: 0.0,
+        pressure: 0.0,
+        tilt: 0.0,
+        azimuth: 0.0,
+        twist: 0.0,
+        barrel: true,
+        hover: true,
     };
     let p = Packet {
         kind: Kind::PencilBegin,
@@ -134,8 +139,11 @@ fn touch_begin_round_trip() {
 #[test]
 fn touch_reserved_bytes_are_zero() {
     let pl = TouchPayload {
-        x: 100.0, y: 200.0,
-        radius_major: 5.0, radius_minor: 4.0, force: 0.1,
+        x: 100.0,
+        y: 200.0,
+        radius_major: 5.0,
+        radius_minor: 4.0,
+        force: 0.1,
     };
     let b = pl.into_bytes();
     // Bytes 14-17 are reserved and must be zero.
@@ -146,7 +154,11 @@ fn touch_reserved_bytes_are_zero() {
 
 #[test]
 fn key_down_a_round_trip() {
-    let pl = KeyPayload { usage_page: 7, usage: 4, modifiers: 2 };
+    let pl = KeyPayload {
+        usage_page: 7,
+        usage: 4,
+        modifiers: 2,
+    };
     let p = Packet {
         kind: Kind::KeyDown,
         time_us: 0,
@@ -165,17 +177,27 @@ fn key_down_a_round_trip() {
 
 #[test]
 fn key_reserved_bytes_are_zero() {
-    let pl = KeyPayload { usage_page: 1, usage: 2, modifiers: 0 };
+    let pl = KeyPayload {
+        usage_page: 1,
+        usage: 2,
+        modifiers: 0,
+    };
     let b = pl.into_bytes();
     assert_eq!(&b[6..18], &[0u8; 12], "reserved bytes 6-17 should be zero");
 }
 
 #[test]
 fn modifier_kind_parses() {
-    let pl = KeyPayload { usage_page: 0xFF, usage: 0x01, modifiers: 0x08 };
+    let pl = KeyPayload {
+        usage_page: 0xFF,
+        usage: 0x01,
+        modifiers: 0x08,
+    };
     let p = Packet {
         kind: Kind::Modifier,
-        time_us: 0, seq: 0, flags: 0,
+        time_us: 0,
+        seq: 0,
+        flags: 0,
         payload: pl.into_bytes(),
     };
     let back = Packet::from_bytes(&p.to_bytes()).unwrap();
@@ -233,8 +255,8 @@ fn shared_vector_corpus_round_trips() {
     let raw = std::fs::read_to_string(&json_path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", json_path.display()));
 
-    let entries: serde_json::Value = serde_json::from_str(&raw)
-        .expect("wire_vectors.json must be valid JSON");
+    let entries: serde_json::Value =
+        serde_json::from_str(&raw).expect("wire_vectors.json must be valid JSON");
 
     let arr = entries.as_array().expect("top-level must be an array");
     assert!(!arr.is_empty(), "corpus must contain at least one entry");
@@ -311,7 +333,13 @@ fn all_nine_kinds_round_trip() {
         Kind::Modifier,
     ];
     for kind in kinds {
-        let p = Packet { kind, time_us: 0, seq: 0, flags: 0, payload: [0; 18] };
+        let p = Packet {
+            kind,
+            time_us: 0,
+            seq: 0,
+            flags: 0,
+            payload: [0; 18],
+        };
         let back = Packet::from_bytes(&p.to_bytes())
             .unwrap_or_else(|e| panic!("kind {:?} round-trip failed: {e}", kind));
         assert_eq!(back.kind, kind);

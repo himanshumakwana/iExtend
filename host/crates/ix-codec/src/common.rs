@@ -43,7 +43,7 @@ impl SharedConfig {
     pub fn default_1080p120() -> Self {
         Self {
             width: 1920,
-            height: 1200,    // virtual monitor is 16:10 (1920×1200)
+            height: 1200, // virtual monitor is 16:10 (1920×1200)
             fps_num: 120,
             fps_den: 1,
             initial_bitrate_kbps: 25_000,

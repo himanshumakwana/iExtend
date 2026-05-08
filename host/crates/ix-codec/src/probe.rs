@@ -162,7 +162,10 @@ impl Probe {
         #[cfg(target_os = "linux")]
         {
             // libvpl.so.2 or libmfx.so
-            let candidates = ["/usr/lib/x86_64-linux-gnu/libvpl.so.2", "/usr/lib/libvpl.so.2"];
+            let candidates = [
+                "/usr/lib/x86_64-linux-gnu/libvpl.so.2",
+                "/usr/lib/libvpl.so.2",
+            ];
             candidates.iter().any(|p| std::path::Path::new(p).exists())
         }
         #[cfg(target_os = "windows")]
@@ -198,10 +201,12 @@ impl Probe {
         {
             // At least one render node and libva present.
             let has_drm = std::fs::read_dir("/dev/dri")
-                .map(|mut d| d.any(|e| {
-                    e.map(|e| e.file_name().to_string_lossy().starts_with("renderD"))
-                        .unwrap_or(false)
-                }))
+                .map(|mut d| {
+                    d.any(|e| {
+                        e.map(|e| e.file_name().to_string_lossy().starts_with("renderD"))
+                            .unwrap_or(false)
+                    })
+                })
                 .unwrap_or(false);
             let has_libva = [
                 "/usr/lib/x86_64-linux-gnu/libva.so.2",

@@ -155,16 +155,14 @@ impl X11Capture {
     ///
     /// Call this once before calling `pump`.  On failure the daemon should
     /// fall back to software capture or abort with a helpful message.
-    pub fn start(
-        connector_name: &str,
-        out: Arc<ArrayQueue<GpuFrame>>,
-    ) -> Result<Self, X11Error> {
+    pub fn start(connector_name: &str, out: Arc<ArrayQueue<GpuFrame>>) -> Result<Self, X11Error> {
         let (conn, screen_num) = x11rb::connect(None)?;
         let screen = &conn.setup().roots[screen_num];
         let root = screen.root;
 
         // Verify extensions.
-        let shm_ok = conn.shm_query_version()
+        let shm_ok = conn
+            .shm_query_version()
             .ok()
             .and_then(|c| c.reply().ok())
             .map(|r| r.shared_pixmaps)
@@ -173,7 +171,8 @@ impl X11Capture {
             return Err(X11Error::NoShm);
         }
 
-        let damage_ok = conn.damage_query_version(1, 1)
+        let damage_ok = conn
+            .damage_query_version(1, 1)
             .ok()
             .and_then(|c| c.reply().ok())
             .map(|r| r.major_version >= 1)
@@ -197,13 +196,15 @@ impl X11Capture {
         let size = stride * 1080;
         let shm_id = unsafe { libc::shmget(libc::IPC_PRIVATE, size, 0o600) };
         if shm_id < 0 {
-            return Err(X11Error::ShmAlloc(std::io::Error::last_os_error().raw_os_error().unwrap_or(-1)));
+            return Err(X11Error::ShmAlloc(
+                std::io::Error::last_os_error().raw_os_error().unwrap_or(-1),
+            ));
         }
-        let shm_addr = unsafe {
-            libc::shmat(shm_id, std::ptr::null(), 0) as *mut u8
-        };
+        let shm_addr = unsafe { libc::shmat(shm_id, std::ptr::null(), 0) as *mut u8 };
         if shm_addr.is_null() {
-            return Err(X11Error::ShmAlloc(std::io::Error::last_os_error().raw_os_error().unwrap_or(-1)));
+            return Err(X11Error::ShmAlloc(
+                std::io::Error::last_os_error().raw_os_error().unwrap_or(-1),
+            ));
         }
 
         // Register the segment with the X server.
@@ -212,7 +213,9 @@ impl X11Capture {
 
         // Delete the kernel's reference so the segment is freed when we
         // shmdt (or the process exits).
-        unsafe { libc::shmctl(shm_id, libc::IPC_RMID, std::ptr::null_mut()); }
+        unsafe {
+            libc::shmctl(shm_id, libc::IPC_RMID, std::ptr::null_mut());
+        }
 
         // Subscribe to damage events on the output window.
         let damage: damage::Damage = conn.generate_id()?;
@@ -252,8 +255,12 @@ impl X11Capture {
 
         // 1. Drain damage events.
         let mut rects: Vec<DamageRect> = Vec::new();
-        while let Some(event) = self.conn.poll_for_event()
-            .map_err(|_| X11Error::NoDamage).ok().flatten()
+        while let Some(event) = self
+            .conn
+            .poll_for_event()
+            .map_err(|_| X11Error::NoDamage)
+            .ok()
+            .flatten()
         {
             if let x11rb::protocol::Event::DamageNotify(ev) = event {
                 rects.push(DamageRect {
@@ -272,18 +279,23 @@ impl X11Capture {
         }
 
         // 2. Fetch the full frame into shm.
-        self.conn.shm_get_image(
-            self.output_window,
-            0, 0,
-            self.width, self.height,
-            !0u32,
-            xproto::ImageFormat::Z_PIXMAP.into(),
-            self.shm_seg,
-            0,
-        )?.reply()?;
+        self.conn
+            .shm_get_image(
+                self.output_window,
+                0,
+                0,
+                self.width,
+                self.height,
+                !0u32,
+                xproto::ImageFormat::Z_PIXMAP.into(),
+                self.shm_seg,
+                0,
+            )?
+            .reply()?;
 
         // 3. Reset damage.
-        self.conn.damage_subtract(self.damage, x11rb::NONE, x11rb::NONE)?;
+        self.conn
+            .damage_subtract(self.damage, x11rb::NONE, x11rb::NONE)?;
 
         // 4. Push frame.
         let frame = GpuFrame {
@@ -321,7 +333,9 @@ impl Drop for X11Capture {
         if self.output_window != 0 {
             // Detach the shm segment.
             if !self.shm_addr.is_null() {
-                unsafe { libc::shmdt(self.shm_addr as *const _); }
+                unsafe {
+                    libc::shmdt(self.shm_addr as *const _);
+                }
                 self.shm_addr = std::ptr::null_mut();
             }
             // Detach from X server (best effort).

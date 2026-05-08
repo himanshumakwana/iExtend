@@ -34,9 +34,9 @@ pub use probe::probe_available_encoders;
 
 // ── encoder implementations (feature-gated) ────────────────────────────────
 #[cfg(feature = "nvenc")]
-pub mod nvenc_hevc;
-#[cfg(feature = "nvenc")]
 pub mod nvenc_av1;
+#[cfg(feature = "nvenc")]
+pub mod nvenc_hevc;
 
 #[cfg(feature = "qsv")]
 pub mod qsv_hevc;

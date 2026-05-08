@@ -71,10 +71,7 @@ impl Browser {
                             .get_property_val_str("hk")
                             .unwrap_or("")
                             .to_string(),
-                        display_name: props
-                            .get_property_val_str("dn")
-                            .unwrap_or("")
-                            .to_string(),
+                        display_name: props.get_property_val_str("dn").unwrap_or("").to_string(),
                         pair_id: props
                             .get_property_val_str("pi")
                             .map(|s| s.to_string())

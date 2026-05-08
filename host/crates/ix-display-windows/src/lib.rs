@@ -32,8 +32,8 @@ pub use error::{Error, Result};
 pub use frame_pump::GpuFrame;
 
 use ix_display::{
-    DisplayError, DisplayMode, DisplaySource, GpuFrame as SharedGpuFrame,
-    GpuFrameKind, MonitorHandle,
+    DisplayError, DisplayMode, DisplaySource, GpuFrame as SharedGpuFrame, GpuFrameKind,
+    MonitorHandle,
 };
 use tracing::{debug, error, info, warn};
 
@@ -62,9 +62,9 @@ use tracing::{debug, error, info, warn};
 /// # }
 /// ```
 pub struct WindowsDisplaySource {
-    conn:     inverted_call::Connection,
-    monitor:  Option<MonitorHandle>,
-    pump_rx:  Option<tokio::sync::mpsc::Receiver<GpuFrame>>,
+    conn: inverted_call::Connection,
+    monitor: Option<MonitorHandle>,
+    pump_rx: Option<tokio::sync::mpsc::Receiver<GpuFrame>>,
 }
 
 impl WindowsDisplaySource {
@@ -97,9 +97,10 @@ impl DisplaySource for WindowsDisplaySource {
         let (tx, rx) =
             tokio::sync::mpsc::channel::<GpuFrame>(iddcx_bindings::IEXDD_MAX_INFLIGHT_FRAMES);
 
-        let conn_clone = self.conn.try_clone().map_err(|e| {
-            DisplayError::Backend(format!("failed to clone device handle: {e}"))
-        })?;
+        let conn_clone = self
+            .conn
+            .try_clone()
+            .map_err(|e| DisplayError::Backend(format!("failed to clone device handle: {e}")))?;
 
         std::thread::Builder::new()
             .name("iextend-pull".into())
@@ -137,8 +138,8 @@ impl DisplaySource for WindowsDisplaySource {
 
                 Some(SharedGpuFrame {
                     kind,
-                    width:        win_frame.width,
-                    height:       win_frame.height,
+                    width: win_frame.width,
+                    height: win_frame.height,
                     damage,
                     timestamp_us: win_frame.present_time_us,
                 })
@@ -153,8 +154,8 @@ impl DisplaySource for WindowsDisplaySource {
 
     fn destroy(&mut self) {
         // Drop the receiver — this signals the pull thread to stop on next send.
-        self.pump_rx  = None;
-        self.monitor  = None;
+        self.pump_rx = None;
+        self.monitor = None;
         info!("WindowsDisplaySource destroyed");
     }
 }

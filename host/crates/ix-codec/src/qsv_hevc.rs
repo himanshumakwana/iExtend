@@ -16,7 +16,9 @@
 #![cfg(feature = "qsv")]
 
 use crate::common::SharedConfig;
-use crate::{CodecError, ColorSpace, EncodedSlice, Encoder, EncoderKind, Negotiated, PeerCaps, Profile};
+use crate::{
+    CodecError, ColorSpace, EncodedSlice, Encoder, EncoderKind, Negotiated, PeerCaps, Profile,
+};
 use ix_display::{DamageRect, GpuFrame};
 
 /// Intel Quick Sync HEVC encoder handle (stub).
@@ -38,9 +40,12 @@ impl QsvHevc {
     pub fn probe() -> bool {
         #[cfg(target_os = "linux")]
         {
-            ["/usr/lib/x86_64-linux-gnu/libvpl.so.2", "/usr/lib/libvpl.so.2"]
-                .iter()
-                .any(|p| std::path::Path::new(p).exists())
+            [
+                "/usr/lib/x86_64-linux-gnu/libvpl.so.2",
+                "/usr/lib/libvpl.so.2",
+            ]
+            .iter()
+            .any(|p| std::path::Path::new(p).exists())
         }
         #[cfg(not(target_os = "linux"))]
         false
@@ -55,11 +60,19 @@ impl Encoder for QsvHevc {
     fn negotiate(&mut self, peer: &PeerCaps) -> Negotiated {
         Negotiated {
             profile: Profile::HevcMain10,
-            color: if peer.supports_hdr() { ColorSpace::Bt2020Pq } else { ColorSpace::Bt709Sdr },
+            color: if peer.supports_hdr() {
+                ColorSpace::Bt2020Pq
+            } else {
+                ColorSpace::Bt709Sdr
+            },
         }
     }
 
-    fn encode(&mut self, _src: &GpuFrame, _dirty: &[DamageRect]) -> Result<EncodedSlice, CodecError> {
+    fn encode(
+        &mut self,
+        _src: &GpuFrame,
+        _dirty: &[DamageRect],
+    ) -> Result<EncodedSlice, CodecError> {
         Err(CodecError::NotAvailable("QsvHevc stub".into()))
     }
 

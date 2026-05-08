@@ -52,7 +52,10 @@ pub struct Dispatcher<I: Injector> {
 impl<I: Injector> Dispatcher<I> {
     /// Create a new dispatcher backed by `injector`.
     pub fn new(injector: std::sync::Arc<I>) -> Self {
-        Self { injector, last_seq: Default::default() }
+        Self {
+            injector,
+            last_seq: Default::default(),
+        }
     }
 
     /// Handle a raw byte slice from the DataChannel.
@@ -69,7 +72,12 @@ impl<I: Injector> Dispatcher<I> {
             self.injector.inject(&p);
             Ok(true)
         } else {
-            tracing::trace!(kind = key, seq = p.seq, last, "dropping out-of-order packet");
+            tracing::trace!(
+                kind = key,
+                seq = p.seq,
+                last,
+                "dropping out-of-order packet"
+            );
             Ok(false)
         }
     }
@@ -108,11 +116,18 @@ mod dispatch_tests {
             seq,
             flags: 0,
             payload: wire::PencilPayload {
-                x: 100.0, y: 200.0, pressure: 0.5,
-                tilt: 0.3, azimuth: 1.0, twist: 0.0,
-                barrel: false, hover: false,
-            }.into_bytes(),
-        }.to_bytes()
+                x: 100.0,
+                y: 200.0,
+                pressure: 0.5,
+                tilt: 0.3,
+                azimuth: 1.0,
+                twist: 0.0,
+                barrel: false,
+                hover: false,
+            }
+            .into_bytes(),
+        }
+        .to_bytes()
     }
 
     #[test]
@@ -152,12 +167,27 @@ mod dispatch_tests {
         let mut d = Dispatcher::new(r.clone());
         // Send touch seq 5 then pencil seq 3 — different kinds, both valid
         let touch = wire::Packet {
-            kind: wire::Kind::TouchMove, time_us: 0, seq: 5, flags: 0,
-            payload: wire::TouchPayload { x: 0.0, y: 0.0, radius_major: 0.0, radius_minor: 0.0, force: 0.0 }.into_bytes(),
-        }.to_bytes();
+            kind: wire::Kind::TouchMove,
+            time_us: 0,
+            seq: 5,
+            flags: 0,
+            payload: wire::TouchPayload {
+                x: 0.0,
+                y: 0.0,
+                radius_major: 0.0,
+                radius_minor: 0.0,
+                force: 0.0,
+            }
+            .into_bytes(),
+        }
+        .to_bytes();
         d.handle(&touch).unwrap();
         d.handle(&pencil_move_bytes(3)).unwrap();
-        assert_eq!(r.0.lock().unwrap().len(), 2, "different kinds accepted independently");
+        assert_eq!(
+            r.0.lock().unwrap().len(),
+            2,
+            "different kinds accepted independently"
+        );
     }
 
     #[test]

@@ -10,7 +10,9 @@
 #![cfg(feature = "nvenc")]
 
 use crate::common::SharedConfig;
-use crate::{CodecError, ColorSpace, EncodedSlice, Encoder, EncoderKind, Negotiated, PeerCaps, Profile};
+use crate::{
+    CodecError, ColorSpace, EncodedSlice, Encoder, EncoderKind, Negotiated, PeerCaps, Profile,
+};
 use ix_display::{DamageRect, GpuFrame};
 
 /// NVENC AV1 encoder handle (stub — requires RTX 40-series and NVENC SDK).
@@ -57,7 +59,11 @@ impl Encoder for NvencAv1 {
         }
     }
 
-    fn encode(&mut self, _src: &GpuFrame, _dirty: &[DamageRect]) -> Result<EncodedSlice, CodecError> {
+    fn encode(
+        &mut self,
+        _src: &GpuFrame,
+        _dirty: &[DamageRect],
+    ) -> Result<EncodedSlice, CodecError> {
         Err(CodecError::NotAvailable("NvencAv1 stub".into()))
     }
 

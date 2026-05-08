@@ -41,10 +41,7 @@ fn priority_order_is_stable_across_calls() {
 
 #[test]
 fn av1_candidate_only_offered_to_m4_peers() {
-    let outcome = Probe::synthetic_for_test(&[
-        EncoderKind::NvencAv1,
-        EncoderKind::NvencHevc,
-    ]);
+    let outcome = Probe::synthetic_for_test(&[EncoderKind::NvencAv1, EncoderKind::NvencHevc]);
 
     let for_m4 = outcome.candidates_for(&m4_peer());
     let for_m2 = outcome.candidates_for(&m2_peer());
@@ -71,10 +68,8 @@ fn software_fallback_emits_warning_flag() {
 
 #[test]
 fn hardware_plus_software_is_not_sw_only() {
-    let outcome = Probe::synthetic_for_test(&[
-        EncoderKind::NvencHevc,
-        EncoderKind::X264SoftwareUlllSw,
-    ]);
+    let outcome =
+        Probe::synthetic_for_test(&[EncoderKind::NvencHevc, EncoderKind::X264SoftwareUlllSw]);
     assert!(!outcome.software_fallback_only());
 }
 
@@ -94,7 +89,9 @@ fn candidates_for_hevc_only_peer_excludes_av1() {
     };
     let candidates = outcome.candidates_for(&peer);
     assert!(
-        candidates.iter().all(|k| !matches!(k, EncoderKind::NvencAv1)),
+        candidates
+            .iter()
+            .all(|k| !matches!(k, EncoderKind::NvencAv1)),
         "AV1 must not appear when peer declares no AV1 decode capability"
     );
 }
@@ -103,19 +100,25 @@ fn candidates_for_hevc_only_peer_excludes_av1() {
 fn empty_probe_returns_empty_candidates() {
     let outcome = Probe::synthetic_for_test(&[]);
     assert!(outcome.candidates_for(&m4_peer()).is_empty());
-    assert!(!outcome.software_fallback_only(), "empty list is not sw-only");
+    assert!(
+        !outcome.software_fallback_only(),
+        "empty list is not sw-only"
+    );
 }
 
 #[test]
 fn candidates_sorted_by_priority() {
     let outcome = Probe::synthetic_for_test(&[
         EncoderKind::X264SoftwareUlllSw, // prio 99
-        EncoderKind::NvencHevc,           // prio 1
-        EncoderKind::VaapiHevc,           // prio 2
+        EncoderKind::NvencHevc,          // prio 1
+        EncoderKind::VaapiHevc,          // prio 2
     ]);
     let candidates = outcome.candidates_for(&m2_peer());
     let priorities: Vec<u8> = candidates.iter().map(|k| k.priority()).collect();
     let mut sorted = priorities.clone();
     sorted.sort();
-    assert_eq!(priorities, sorted, "candidates must be sorted ascending by priority");
+    assert_eq!(
+        priorities, sorted,
+        "candidates must be sorted ascending by priority"
+    );
 }

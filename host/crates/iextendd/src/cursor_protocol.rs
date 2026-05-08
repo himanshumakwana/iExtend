@@ -39,7 +39,12 @@ pub struct CursorOverlayHint {
 
 impl Default for CursorOverlayHint {
     fn default() -> Self {
-        Self { sprite_id: 0, x: 0.0, y: 0.0, host_cursor_suppressed: false }
+        Self {
+            sprite_id: 0,
+            x: 0.0,
+            y: 0.0,
+            host_cursor_suppressed: false,
+        }
     }
 }
 
@@ -87,7 +92,9 @@ pub fn tick(
 ) -> (Option<String>, Option<CursorOverlayHint>) {
     let msg_opt = emitter.tick();
     let (json_opt, hint_opt) = match &msg_opt {
-        Some(ControlMsg::Cursor { x, y, sprite_id, .. }) => {
+        Some(ControlMsg::Cursor {
+            x, y, sprite_id, ..
+        }) => {
             let hint = CursorOverlayHint {
                 sprite_id: *sprite_id,
                 x: *x,
@@ -111,14 +118,23 @@ mod tests {
     #[test]
     fn encode_decode_roundtrip_cursor() {
         let msg = ControlMsg::Cursor {
-            x: 42.0, y: 99.5, sprite_id: 3,
-            hotspot_x: 1.0, hotspot_y: 1.0,
+            x: 42.0,
+            y: 99.5,
+            sprite_id: 3,
+            hotspot_x: 1.0,
+            hotspot_y: 1.0,
             ts_us: 12_345_678,
         };
         let json = encode_control_msg(&msg).unwrap();
         let back = decode_control_msg(&json).unwrap();
         match back {
-            ControlMsg::Cursor { x, y, sprite_id, ts_us, .. } => {
+            ControlMsg::Cursor {
+                x,
+                y,
+                sprite_id,
+                ts_us,
+                ..
+            } => {
                 assert_eq!(x, 42.0);
                 assert_eq!(y, 99.5);
                 assert_eq!(sprite_id, 3);

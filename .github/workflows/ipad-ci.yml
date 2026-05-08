@@ -46,19 +46,19 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ipad/Frameworks/WebRTC.xcframework
-          key: webrtc-xcframework-M127-2025-01
+          key: webrtc-xcframework-M141-v1
 
       - name: Download WebRTC.xcframework (stasel build)
         if: steps.webrtc-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           mkdir -p Frameworks
-          # stasel publishes signed Apple-platform builds at:
+          # stasel publishes signed Apple-platform builds at
           #   https://github.com/stasel/WebRTC/releases
-          # Pin a tag so a future release can't break our build silently.
+          # Asset filename is WebRTC-M<N>.xcframework.zip — pin a known tag.
           curl -L --fail \
             -o /tmp/WebRTC.xcframework.zip \
-            https://github.com/stasel/WebRTC/releases/download/127.0.0/WebRTC-M127.zip
+            https://github.com/stasel/WebRTC/releases/download/141.0.0/WebRTC-M141.xcframework.zip
           unzip -q /tmp/WebRTC.xcframework.zip -d Frameworks/
           ls Frameworks/
 

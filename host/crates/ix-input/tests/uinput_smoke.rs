@@ -20,7 +20,7 @@
 
 #[cfg(target_os = "linux")]
 mod linux_integration {
-    use ix_input::wire::{Kind, KeyPayload, Packet, PencilPayload, TouchPayload};
+    use ix_input::wire::{KeyPayload, Kind, Packet, PencilPayload, TouchPayload};
     use ix_input::Injector;
 
     #[test]
@@ -67,7 +67,11 @@ mod linux_integration {
         inj.inject(&touch_pkt);
 
         // Inject a key down for 'a' (HID usage page 7, usage 0x04).
-        let key_pl = KeyPayload { usage_page: 7, usage: 4, modifiers: 0 };
+        let key_pl = KeyPayload {
+            usage_page: 7,
+            usage: 4,
+            modifiers: 0,
+        };
         let key_pkt = Packet {
             kind: Kind::KeyDown,
             time_us: 1_020_000,
@@ -84,10 +88,16 @@ mod linux_integration {
             seq: 4,
             flags: 0,
             payload: PencilPayload {
-                x: 683.0, y: 512.0, pressure: 0.0,
-                tilt: 0.0, azimuth: 0.0, twist: 0.0,
-                barrel: false, hover: false,
-            }.into_bytes(),
+                x: 683.0,
+                y: 512.0,
+                pressure: 0.0,
+                tilt: 0.0,
+                azimuth: 0.0,
+                twist: 0.0,
+                barrel: false,
+                hover: false,
+            }
+            .into_bytes(),
         };
         inj.inject(&pencil_end);
 
@@ -102,8 +112,7 @@ mod linux_integration {
         use ix_input::Dispatcher;
         use std::sync::Arc;
 
-        let inj = ix_input::linux::LinuxInjector::new()
-            .expect("uinput accessible");
+        let inj = ix_input::linux::LinuxInjector::new().expect("uinput accessible");
         let inj = Arc::new(inj);
         let mut d = Dispatcher::new(inj);
 
@@ -113,8 +122,11 @@ mod linux_integration {
                 x: seq as f32 * 10.0,
                 y: seq as f32 * 8.0,
                 pressure: seq as f32 * 0.1,
-                tilt: 0.2, azimuth: 1.0, twist: 0.0,
-                barrel: false, hover: false,
+                tilt: 0.2,
+                azimuth: 1.0,
+                twist: 0.0,
+                barrel: false,
+                hover: false,
             };
             let pkt = Packet {
                 kind: Kind::PencilMove,

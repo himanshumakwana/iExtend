@@ -199,7 +199,10 @@ mod tests {
     fn rejects_bad_magic() {
         let mut bytes = PairMsg::new(PairKind::PStart, vec![]).encode().unwrap();
         bytes[0] = 0xFF;
-        assert!(matches!(PairMsg::decode(&bytes), Err(WireError::BadMagic(_))));
+        assert!(matches!(
+            PairMsg::decode(&bytes),
+            Err(WireError::BadMagic(_))
+        ));
     }
 
     #[test]
@@ -214,7 +217,9 @@ mod tests {
 
     #[test]
     fn rejects_truncated_body() {
-        let bytes = PairMsg::new(PairKind::PStart, vec![1; 32]).encode().unwrap();
+        let bytes = PairMsg::new(PairKind::PStart, vec![1; 32])
+            .encode()
+            .unwrap();
         // chop one byte off the body
         let bad = &bytes[..bytes.len() - 1];
         assert!(matches!(

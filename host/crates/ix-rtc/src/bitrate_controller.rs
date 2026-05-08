@@ -127,7 +127,8 @@ impl BitrateController {
         self.deadband_abs_kbps = 0;
 
         let new_target = ((self.target_kbps as i64 + capped)
-            .clamp(self.floor_kbps as i64, self.ceiling_kbps as i64)) as u32;
+            .clamp(self.floor_kbps as i64, self.ceiling_kbps as i64))
+            as u32;
 
         if new_target == self.target_kbps {
             return None;

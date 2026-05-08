@@ -19,7 +19,7 @@
 // file descriptors are managed as owned OwnedFd to guarantee they are closed
 // on drop even if inject() panics.
 
-use crate::wire::{self, Kind, KeyPayload, PencilPayload, TouchPayload};
+use crate::wire::{self, KeyPayload, Kind, PencilPayload, TouchPayload};
 use crate::Injector;
 use std::fs::OpenOptions;
 use std::io;
@@ -34,30 +34,30 @@ const EV_ABS: u16 = 0x03;
 
 const SYN_REPORT: u16 = 0;
 
-const ABS_X:        u16 = 0x00;
-const ABS_Y:        u16 = 0x01;
+const ABS_X: u16 = 0x00;
+const ABS_Y: u16 = 0x01;
 const ABS_PRESSURE: u16 = 0x18;
-const ABS_TILT_X:   u16 = 0x1A;
-const ABS_TILT_Y:   u16 = 0x1B;
+const ABS_TILT_X: u16 = 0x1A;
+const ABS_TILT_Y: u16 = 0x1B;
 const ABS_DISTANCE: u16 = 0x19;
 
 const BTN_TOOL_PEN: u16 = 0x140;
-const BTN_TOUCH:    u16 = 0x14A;
-const BTN_STYLUS:   u16 = 0x14B;
+const BTN_TOUCH: u16 = 0x14A;
+const BTN_STYLUS: u16 = 0x14B;
 
 // Multi-touch
-const ABS_MT_SLOT:         u16 = 0x2F;
-const ABS_MT_POSITION_X:   u16 = 0x35;
-const ABS_MT_POSITION_Y:   u16 = 0x36;
-const ABS_MT_TOUCH_MAJOR:  u16 = 0x30;
-const ABS_MT_TOUCH_MINOR:  u16 = 0x31;
-const ABS_MT_TRACKING_ID:  u16 = 0x39;
-const ABS_MT_PRESSURE:     u16 = 0x3A;
-const BTN_TOUCH_MT:        u16 = 0x14A; // same as BTN_TOUCH
+const ABS_MT_SLOT: u16 = 0x2F;
+const ABS_MT_POSITION_X: u16 = 0x35;
+const ABS_MT_POSITION_Y: u16 = 0x36;
+const ABS_MT_TOUCH_MAJOR: u16 = 0x30;
+const ABS_MT_TOUCH_MINOR: u16 = 0x31;
+const ABS_MT_TRACKING_ID: u16 = 0x39;
+const ABS_MT_PRESSURE: u16 = 0x3A;
+const BTN_TOUCH_MT: u16 = 0x14A; // same as BTN_TOUCH
 
 // uinput ioctl numbers (from <linux/uinput.h>).
 // These match kernel 5.15+ on x86_64 and aarch64.
-const UI_SET_EVBIT:  u64 = 0x40045564;
+const UI_SET_EVBIT: u64 = 0x40045564;
 const UI_SET_KEYBIT: u64 = 0x40045565;
 const UI_SET_ABSBIT: u64 = 0x40045567;
 const UI_DEV_CREATE: u64 = 0x5501;
@@ -70,9 +70,9 @@ const UI_SET_PROPBIT: u64 = 0x4004556e; // INPUT_PROP_DIRECT for touch
 // 64 ABS axes, but we only need a name + axes info for our small set.
 #[repr(C)]
 struct UinputSetup {
-    id:     InputId,
+    id: InputId,
     ff_effects_max: u32,
-    name:   [u8; 80],
+    name: [u8; 80],
 }
 
 #[allow(dead_code)]
@@ -86,11 +86,11 @@ struct AbsSetup {
 #[allow(dead_code)]
 #[repr(C)]
 struct InputAbsinfo {
-    value:      i32,
-    minimum:    i32,
-    maximum:    i32,
-    fuzz:       i32,
-    flat:       i32,
+    value: i32,
+    minimum: i32,
+    maximum: i32,
+    fuzz: i32,
+    flat: i32,
     resolution: i32,
 }
 
@@ -98,7 +98,7 @@ struct InputAbsinfo {
 #[derive(Clone, Copy)]
 struct InputId {
     bustype: u16,
-    vendor:  u16,
+    vendor: u16,
     product: u16,
     version: u16,
 }
@@ -106,10 +106,10 @@ struct InputId {
 // input_event: 24 bytes on 64-bit Linux (timeval is 16 bytes + type + code + value).
 #[repr(C)]
 struct InputEvent {
-    sec:   i64,
-    usec:  i64,
+    sec: i64,
+    usec: i64,
     type_: u16,
-    code:  u16,
+    code: u16,
     value: i32,
 }
 
@@ -122,8 +122,8 @@ struct InputEvent {
 /// Returns `Err` if `/dev/uinput` is not accessible or any ioctl fails.
 pub struct LinuxInjector {
     stylus_fd: OwnedFd,
-    touch_fd:  OwnedFd,
-    kbd_fd:    OwnedFd,
+    touch_fd: OwnedFd,
+    kbd_fd: OwnedFd,
 }
 
 impl LinuxInjector {
@@ -131,8 +131,8 @@ impl LinuxInjector {
     pub fn new() -> io::Result<Self> {
         Ok(Self {
             stylus_fd: create_stylus_device()?,
-            touch_fd:  create_touch_device()?,
-            kbd_fd:    create_keyboard_device()?,
+            touch_fd: create_touch_device()?,
+            kbd_fd: create_keyboard_device()?,
         })
     }
 }
@@ -175,18 +175,18 @@ fn inject_pencil(fd: &OwnedFd, p: &wire::Packet) {
     let fd_raw = fd.as_raw_fd();
 
     emit(fd_raw, EV_KEY, BTN_TOOL_PEN, 1);
-    emit(fd_raw, EV_KEY, BTN_TOUCH,    if is_contact { 1 } else { 0 });
-    emit(fd_raw, EV_KEY, BTN_STYLUS,   if pl.barrel { 1 } else { 0 });
-    emit(fd_raw, EV_ABS, ABS_X,        abs_x);
-    emit(fd_raw, EV_ABS, ABS_Y,        abs_y);
+    emit(fd_raw, EV_KEY, BTN_TOUCH, if is_contact { 1 } else { 0 });
+    emit(fd_raw, EV_KEY, BTN_STYLUS, if pl.barrel { 1 } else { 0 });
+    emit(fd_raw, EV_ABS, ABS_X, abs_x);
+    emit(fd_raw, EV_ABS, ABS_Y, abs_y);
     emit(fd_raw, EV_ABS, ABS_PRESSURE, pressure);
     emit(fd_raw, EV_ABS, ABS_DISTANCE, distance);
-    emit(fd_raw, EV_ABS, ABS_TILT_X,   tilt_x);
-    emit(fd_raw, EV_ABS, ABS_TILT_Y,   tilt_y);
+    emit(fd_raw, EV_ABS, ABS_TILT_X, tilt_x);
+    emit(fd_raw, EV_ABS, ABS_TILT_Y, tilt_y);
 
     if p.kind == Kind::PencilEnd {
         emit(fd_raw, EV_KEY, BTN_TOOL_PEN, 0);
-        emit(fd_raw, EV_KEY, BTN_TOUCH,    0);
+        emit(fd_raw, EV_KEY, BTN_TOUCH, 0);
     }
 
     emit(fd_raw, EV_SYN, SYN_REPORT, 0);
@@ -200,14 +200,39 @@ fn inject_touch(fd: &OwnedFd, p: &wire::Packet) {
     let fd_raw = fd.as_raw_fd();
 
     // Protocol B: always slot 0 for single-touch paths.
-    emit(fd_raw, EV_ABS, ABS_MT_SLOT,        0);
-    emit(fd_raw, EV_ABS, ABS_MT_TRACKING_ID, if p.kind == Kind::TouchEnd { -1 } else { 1 });
-    emit(fd_raw, EV_ABS, ABS_MT_POSITION_X,  pl.x.round() as i32);
-    emit(fd_raw, EV_ABS, ABS_MT_POSITION_Y,  pl.y.round() as i32);
-    emit(fd_raw, EV_ABS, ABS_MT_TOUCH_MAJOR, (pl.radius_major * 100.0).round() as i32);
-    emit(fd_raw, EV_ABS, ABS_MT_TOUCH_MINOR, (pl.radius_minor * 100.0).round() as i32);
-    emit(fd_raw, EV_ABS, ABS_MT_PRESSURE,    (pl.force * 255.0).round() as i32);
-    emit(fd_raw, EV_KEY, BTN_TOUCH_MT,       if p.kind == Kind::TouchEnd { 0 } else { 1 });
+    emit(fd_raw, EV_ABS, ABS_MT_SLOT, 0);
+    emit(
+        fd_raw,
+        EV_ABS,
+        ABS_MT_TRACKING_ID,
+        if p.kind == Kind::TouchEnd { -1 } else { 1 },
+    );
+    emit(fd_raw, EV_ABS, ABS_MT_POSITION_X, pl.x.round() as i32);
+    emit(fd_raw, EV_ABS, ABS_MT_POSITION_Y, pl.y.round() as i32);
+    emit(
+        fd_raw,
+        EV_ABS,
+        ABS_MT_TOUCH_MAJOR,
+        (pl.radius_major * 100.0).round() as i32,
+    );
+    emit(
+        fd_raw,
+        EV_ABS,
+        ABS_MT_TOUCH_MINOR,
+        (pl.radius_minor * 100.0).round() as i32,
+    );
+    emit(
+        fd_raw,
+        EV_ABS,
+        ABS_MT_PRESSURE,
+        (pl.force * 255.0).round() as i32,
+    );
+    emit(
+        fd_raw,
+        EV_KEY,
+        BTN_TOUCH_MT,
+        if p.kind == Kind::TouchEnd { 0 } else { 1 },
+    );
     emit(fd_raw, EV_SYN, SYN_REPORT, 0);
 }
 
@@ -224,10 +249,10 @@ fn inject_key(fd: &OwnedFd, p: &wire::Packet) {
     // passthrough here; production code should use a full HID→evdev table.
     let linux_key = hid_to_linux_key(pl.usage_page, pl.usage);
     let value = match p.kind {
-        Kind::KeyDown  => 1,
-        Kind::KeyUp    => 0,
+        Kind::KeyDown => 1,
+        Kind::KeyUp => 0,
         Kind::Modifier => 2, // autorepeat — used for modifier hold
-        _              => return,
+        _ => return,
     };
     emit(fd_raw, EV_KEY, linux_key, value);
     emit(fd_raw, EV_SYN, SYN_REPORT, 0);
@@ -254,9 +279,18 @@ fn hid_to_linux_key(usage_page: u16, usage: u16) -> u16 {
 
 /// Write a single input_event to the uinput fd.
 fn emit(fd: RawFd, type_: u16, code: u16, value: i32) {
-    let ev = InputEvent { sec: 0, usec: 0, type_, code, value };
+    let ev = InputEvent {
+        sec: 0,
+        usec: 0,
+        type_,
+        code,
+        value,
+    };
     let bytes = unsafe {
-        std::slice::from_raw_parts(&ev as *const _ as *const u8, std::mem::size_of::<InputEvent>())
+        std::slice::from_raw_parts(
+            &ev as *const _ as *const u8,
+            std::mem::size_of::<InputEvent>(),
+        )
     };
     // Ignore write errors — the device may not be connected yet during unit tests.
     let _ = unsafe { libc::write(fd, bytes.as_ptr() as *const libc::c_void, bytes.len()) };
@@ -296,7 +330,12 @@ unsafe fn ioctl_set_absbit(fd: RawFd, abs: u32) -> io::Result<()> {
 
 fn write_uinput_setup(fd: RawFd, name: &[u8]) -> io::Result<()> {
     let mut setup = UinputSetup {
-        id: InputId { bustype: 0x0003 /*BUS_USB*/, vendor: 0x05AC /*Apple*/, product: 0x0001, version: 1 },
+        id: InputId {
+            bustype: 0x0003, /*BUS_USB*/
+            vendor: 0x05AC,  /*Apple*/
+            product: 0x0001,
+            version: 1,
+        },
         ff_effects_max: 0,
         name: [0; 80],
     };
@@ -305,10 +344,15 @@ fn write_uinput_setup(fd: RawFd, name: &[u8]) -> io::Result<()> {
 
     // Write as raw bytes — uinput_user_dev compat
     let bytes = unsafe {
-        std::slice::from_raw_parts(&setup as *const _ as *const u8, std::mem::size_of::<UinputSetup>())
+        std::slice::from_raw_parts(
+            &setup as *const _ as *const u8,
+            std::mem::size_of::<UinputSetup>(),
+        )
     };
     let r = unsafe { libc::write(fd, bytes.as_ptr() as *const libc::c_void, bytes.len()) };
-    if r < 0 { return Err(io::Error::last_os_error()); }
+    if r < 0 {
+        return Err(io::Error::last_os_error());
+    }
 
     // Setup abs axes for each ABS code via UI_ABS_SETUP ioctl (kernel 4.5+)
     // or legacy write of abs_max / abs_min arrays.  For simplicity we skip
@@ -330,14 +374,14 @@ fn create_stylus_device() -> io::Result<OwnedFd> {
         ioctl_set_evbit(fd, EV_ABS as u32)?;
         ioctl_set_evbit(fd, EV_SYN as u32)?;
         ioctl_set_keybit(fd, BTN_TOOL_PEN as u32)?;
-        ioctl_set_keybit(fd, BTN_TOUCH    as u32)?;
-        ioctl_set_keybit(fd, BTN_STYLUS   as u32)?;
-        ioctl_set_absbit(fd, ABS_X        as u32)?;
-        ioctl_set_absbit(fd, ABS_Y        as u32)?;
+        ioctl_set_keybit(fd, BTN_TOUCH as u32)?;
+        ioctl_set_keybit(fd, BTN_STYLUS as u32)?;
+        ioctl_set_absbit(fd, ABS_X as u32)?;
+        ioctl_set_absbit(fd, ABS_Y as u32)?;
         ioctl_set_absbit(fd, ABS_PRESSURE as u32)?;
         ioctl_set_absbit(fd, ABS_DISTANCE as u32)?;
-        ioctl_set_absbit(fd, ABS_TILT_X   as u32)?;
-        ioctl_set_absbit(fd, ABS_TILT_Y   as u32)?;
+        ioctl_set_absbit(fd, ABS_TILT_X as u32)?;
+        ioctl_set_absbit(fd, ABS_TILT_Y as u32)?;
     }
     write_uinput_setup(fd, b"iExtend Stylus")?;
     ui_dev_create(fd)?;
@@ -351,13 +395,13 @@ fn create_touch_device() -> io::Result<OwnedFd> {
         ioctl_set_evbit(fd, EV_ABS as u32)?;
         ioctl_set_evbit(fd, EV_SYN as u32)?;
         ioctl_set_keybit(fd, BTN_TOUCH_MT as u32)?;
-        ioctl_set_absbit(fd, ABS_MT_SLOT       as u32)?;
+        ioctl_set_absbit(fd, ABS_MT_SLOT as u32)?;
         ioctl_set_absbit(fd, ABS_MT_TRACKING_ID as u32)?;
-        ioctl_set_absbit(fd, ABS_MT_POSITION_X  as u32)?;
-        ioctl_set_absbit(fd, ABS_MT_POSITION_Y  as u32)?;
+        ioctl_set_absbit(fd, ABS_MT_POSITION_X as u32)?;
+        ioctl_set_absbit(fd, ABS_MT_POSITION_Y as u32)?;
         ioctl_set_absbit(fd, ABS_MT_TOUCH_MAJOR as u32)?;
         ioctl_set_absbit(fd, ABS_MT_TOUCH_MINOR as u32)?;
-        ioctl_set_absbit(fd, ABS_MT_PRESSURE    as u32)?;
+        ioctl_set_absbit(fd, ABS_MT_PRESSURE as u32)?;
     }
     write_uinput_setup(fd, b"iExtend Touch")?;
     ui_dev_create(fd)?;
@@ -385,8 +429,8 @@ impl Drop for LinuxInjector {
     fn drop(&mut self) {
         unsafe {
             libc::ioctl(self.stylus_fd.as_raw_fd(), UI_DEV_DESTROY);
-            libc::ioctl(self.touch_fd.as_raw_fd(),  UI_DEV_DESTROY);
-            libc::ioctl(self.kbd_fd.as_raw_fd(),    UI_DEV_DESTROY);
+            libc::ioctl(self.touch_fd.as_raw_fd(), UI_DEV_DESTROY);
+            libc::ioctl(self.kbd_fd.as_raw_fd(), UI_DEV_DESTROY);
         }
     }
 }
