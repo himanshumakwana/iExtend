@@ -1,0 +1,20 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=iExtend
+GenericName=iPad Second Screen
+Comment=Use your iPad as a wireless second screen
+Exec=/usr/bin/iextend-tray
+Icon=iextend
+Terminal=false
+Categories=Utility;Network;
+Keywords=iPad;second screen;display;monitor;Pencil;stylus;wireless;
+StartupNotify=false
+
+# XDG autostart: start at login for every desktop session.
+# GNOME, KDE, XFCE, and most other XDG-compliant desktops honour this file.
+# Users can disable autostart by toggling in their "Startup Applications"
+# control panel, or by copying this file to ~/.config/autostart/ and setting
+# X-GNOME-Autostart-enabled=false.
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel

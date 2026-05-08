@@ -1,0 +1,8 @@
+Initial release.
+
+• Wireless second monitor over Wi-Fi (H.265/AV1, <30 ms on Wi-Fi 6)
+• USB-C wired mode for zero-latency use cases
+• Apple Pencil pressure, tilt, and azimuth forwarded as Wacom-compatible stylus
+• Mirror or extend mode toggle in the tray
+• 4-digit PIN or QR-code pairing
+• No account, no telemetry, no login required

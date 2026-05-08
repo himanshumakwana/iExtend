@@ -1,0 +1,59 @@
+# bench/cluster/playbook.yml — iExtend hardware-CI cluster master playbook.
+#
+# Orchestrates all four cluster boxes by applying three roles in order:
+#   1. base          — timezone, NTP/chrony, hostname, auto-update policy
+#   2. iextendd-runner — install iextendd daemon from the latest stable package
+#   3. ipad-tether   — document + verify the one-time iPad pairing step
+#
+# The GitHub Actions self-hosted runner registration is handled separately via
+# the organisation's runner-registration flow; see bench/cluster/README.md §4.
+#
+# Usage:
+#   # Dry-run (check mode, no changes applied):
+#   ansible-playbook -i inventory.yml playbook.yml --check
+#
+#   # Apply to all boxes:
+#   ansible-playbook -i inventory.yml playbook.yml
+#
+#   # Apply to one box only:
+#   ansible-playbook -i inventory.yml playbook.yml --limit ubuntu-rx7600
+#
+# Requires: Ansible 2.16+, community.windows collection for Win11 tasks.
+#   pip install ansible
+#   ansible-galaxy collection install community.windows community.general
+
+---
+- name: Provision all iExtend hardware-CI boxes
+  hosts: all
+  gather_facts: true
+
+  pre_tasks:
+    - name: Print target host summary
+      ansible.builtin.debug:
+        msg: >
+          Provisioning {{ inventory_hostname }}
+          ({{ ansible_system | default('unknown OS') }},
+          GPU={{ gpu_vendor | default('unknown') }}/{{ gpu_model | default('unknown') }})
+
+  roles:
+    - role: base
+      tags: [base, always]
+
+    - role: iextendd-runner
+      tags: [iextendd, runner]
+
+    - role: ipad-tether
+      tags: [ipad, tether]
+
+  post_tasks:
+    - name: Verify iextendd binary is reachable
+      ansible.builtin.command: iextendd --version
+      register: version_out
+      changed_when: false
+      failed_when: version_out.rc != 0
+      tags: [verify]
+
+    - name: Print version
+      ansible.builtin.debug:
+        msg: "iextendd version: {{ version_out.stdout }}"
+      tags: [verify]

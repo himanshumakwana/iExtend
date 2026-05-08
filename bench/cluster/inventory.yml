@@ -1,0 +1,75 @@
+# bench/cluster/inventory.yml — iExtend hardware-CI cluster Ansible inventory.
+#
+# Copy this file to `inventory.local.yml` (gitignored) and fill in the real
+# static IPs assigned to each box via DHCP reservation.
+#
+# Host groups:
+#   win11_hosts   — Windows 11 boxes (SSH via OpenSSH, PowerShell shell)
+#   ubuntu_hosts  — Ubuntu 24.04 LTS boxes (SSH, bash shell, sudo)
+#   ipad_hosts    — not real Ansible hosts; documents which iPad is paired with
+#                   which box. The iPad pairing step is manual (SPAKE2 PIN).
+#
+# Usage:
+#   ansible-playbook -i inventory.yml bench/cluster/playbook.yml
+#   ansible-playbook -i inventory.yml bench/cluster/playbook.yml --limit win11_hosts
+
+all:
+  children:
+
+    # ── Windows 11 boxes ─────────────────────────────────────────────────────
+    win11_hosts:
+      vars:
+        ansible_connection: ssh
+        ansible_user: iextend-runner
+        ansible_shell_type: powershell
+        ansible_shell_executable: pwsh
+        # For OpenSSH on Windows: the private key for the runner's SSH identity.
+        # ansible_ssh_private_key_file: ~/.ssh/iextend_cluster_ed25519
+        os_family: windows
+
+      hosts:
+        # Box 1: Win11 + NVIDIA RTX 4060 (NVENC AV1 + HEVC path)
+        win11-rtx4060:
+          ansible_host: 10.0.10.11
+          gpu_vendor: nvidia
+          gpu_model: rtx4060
+          nvenc_available: true
+          qsv_available: false
+          extra_runner_labels: "windows,nvidia,rtx4060,nvenc"
+          nvidia_driver_version: "555.85"
+
+        # Box 2: Win11 + Intel iGPU (Xe-LPG, Quick Sync path)
+        win11-igpu:
+          ansible_host: 10.0.10.12
+          gpu_vendor: intel
+          gpu_model: xe-lpg
+          nvenc_available: false
+          qsv_available: true
+          extra_runner_labels: "windows,intel,igpu,qsv"
+
+    # ── Ubuntu 24.04 boxes ───────────────────────────────────────────────────
+    ubuntu_hosts:
+      vars:
+        ansible_connection: ssh
+        ansible_user: iextend-runner
+        ansible_become: true
+        ansible_become_method: sudo
+        os_family: linux
+
+      hosts:
+        # Box 3: Ubuntu 24.04 + AMD RX 7600 (VAAPI HEVC + AMF path)
+        ubuntu-rx7600:
+          ansible_host: 10.0.10.13
+          gpu_vendor: amd
+          gpu_model: rx7600
+          vaapi_available: true
+          extra_runner_labels: "linux,amd,rx7600,vaapi"
+
+        # Box 4: Ubuntu 24.04 + Intel iGPU (VAAPI + QSV on Linux)
+        ubuntu-igpu:
+          ansible_host: 10.0.10.14
+          gpu_vendor: intel
+          gpu_model: xe-lpg
+          vaapi_available: true
+          qsv_available: true
+          extra_runner_labels: "linux,intel,igpu,qsv,vaapi"

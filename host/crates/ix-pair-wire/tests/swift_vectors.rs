@@ -41,7 +41,8 @@ fn vector_v2_response_with_body() {
 fn vector_v3_err_with_code() {
     let m = PairMsg::new(PairKind::PErr, vec![0xDE, 0xAD]);
     let hex = hex_encode(&m.encode().unwrap());
-    assert_eq!(hex, "495850440101 ff 0002 dead".replace(' ', ""));
+    // 49585044 (magic) | 01 (ver) | ff (kind PErr) | 0002 (len) | dead (body)
+    assert_eq!(hex, "4958504401ff0002dead");
 }
 
 /// Sanity: changing magic invalidates the frame.

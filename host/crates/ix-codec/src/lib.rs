@@ -1,37 +1,51 @@
-//! Video encoder trait. Real impls (NVENC, QSV, AMF, VAAPI, x264) land in Plan 5.
+//! ix-codec — multi-encoder dispatch with hardware and software paths.
+//!
+//! # Architecture
+//! - [`Encoder`] trait is the only type callers need to name.
+//! - [`probe`] module probes available hardware at daemon startup.
+//! - [`common`] holds the shared [`SharedConfig`] (spec §5.2 preset).
+//! - Each encoder module is feature-gated; they compile to stub impls that
+//!   return [`CodecError::NotAvailable`] when the vendor SDK is absent.
+//!
+//! # Feature flags
+//! | Feature    | What it enables                                 |
+//! |------------|-------------------------------------------------|
+//! | `sw-only`  | `openh264` software H.264 fallback (default)    |
+//! | `nvenc`    | NVIDIA NVENC HEVC + AV1 (stubs without SDK)    |
+//! | `qsv`      | Intel Quick Sync via oneVPL                     |
+//! | `amf`      | AMD AMF HEVC (Windows-primary)                 |
+//! | `vaapi`    | VAAPI HEVC (Linux Intel/AMD)                   |
+//! | `all-codecs` | all of the above                              |
 
-use async_trait::async_trait;
-use thiserror::Error;
+// ── public trait surface ────────────────────────────────────────────────────
+pub mod trait_;
+pub use trait_::{
+    CodecError, ColorSpace, EncodedSlice, Encoder, EncoderKind, Negotiated, PeerCaps, PeerKind,
+    Profile,
+};
 
-#[derive(Debug, Error)]
-pub enum CodecError {
-    #[error("encoder not available")]
-    Unavailable,
-    #[error("encode failed: {0}")]
-    Encode(String),
-}
+// ── shared configuration ───────────────────────────────────────────────────
+pub mod common;
+pub use common::SharedConfig;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CodecKind {
-    H264,
-    Hevc,
-    Av1,
-}
+// ── runtime probe ──────────────────────────────────────────────────────────
+pub mod probe;
+pub use probe::probe_available_encoders;
 
-#[async_trait]
-pub trait Encoder: Send + Sync {
-    fn kind(&self) -> CodecKind;
-    async fn encode_frame(&mut self, _texture_handle: u64) -> Result<Vec<u8>, CodecError> {
-        Err(CodecError::Unavailable)
-    }
-}
+// ── encoder implementations (feature-gated) ────────────────────────────────
+#[cfg(feature = "nvenc")]
+pub mod nvenc_hevc;
+#[cfg(feature = "nvenc")]
+pub mod nvenc_av1;
 
-/// Compiles, never produces frames. Replaced by real impls in Plan 5.
-pub struct NoOpEncoder;
+#[cfg(feature = "qsv")]
+pub mod qsv_hevc;
 
-#[async_trait]
-impl Encoder for NoOpEncoder {
-    fn kind(&self) -> CodecKind {
-        CodecKind::Hevc
-    }
-}
+#[cfg(feature = "amf")]
+pub mod amf_hevc;
+
+#[cfg(feature = "vaapi")]
+pub mod vaapi_hevc;
+
+#[cfg(feature = "sw-only")]
+pub mod x264_sw;

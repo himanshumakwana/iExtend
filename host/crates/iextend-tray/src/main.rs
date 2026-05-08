@@ -1,5 +1,6 @@
 mod app;
 mod client;
+mod pair_screen;
 
 fn main() -> eframe::Result<()> {
     init_logging();

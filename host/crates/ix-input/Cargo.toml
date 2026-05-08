@@ -4,7 +4,27 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[features]
+# Enable the Linux uinput injector (requires /dev/uinput access).
+linux = []
+# Enable integration tests that open real OS device nodes.
+integration = []
+
 [dependencies]
-async-trait = { workspace = true }
 thiserror   = { workspace = true }
 tracing     = { workspace = true }
+anyhow      = { workspace = true }
+async-trait = { workspace = true }
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# libc for ioctl on /dev/uinput
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# Windows: cfg-gated, not compiled on Linux CI
+# windows crate pinned; only HANDLE / io primitives needed here.
+
+[dev-dependencies]
+serde_json = "1"

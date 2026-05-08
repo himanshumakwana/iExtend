@@ -1,0 +1,20 @@
+# ipad/installer/AppStoreConnect/Appfile
+#
+# fastlane app configuration.
+#
+# Sensitive values (Apple ID, team IDs) are read from environment variables
+# so this file is safe to commit.  Never hardcode credentials here.
+#
+# Set these in:
+#   - CI: GitHub Actions secrets
+#   - Local: .env.local (which is .gitignore'd)
+#
+# To create .env.local:
+#   echo 'APPLE_ID=you@example.com' >> .env.local
+#   echo 'APPLE_TEAM_ID=ABCDE12345' >> .env.local
+#   echo 'APPLE_ITC_TEAM_ID=123456789' >> .env.local
+
+app_identifier "com.iextend.iExtend"
+apple_id ENV["APPLE_ID"]
+team_id ENV["APPLE_TEAM_ID"]
+itc_team_id ENV["APPLE_ITC_TEAM_ID"]

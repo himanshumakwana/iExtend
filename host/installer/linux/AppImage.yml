@@ -1,0 +1,74 @@
+# AppImage.yml — appimage-builder recipe for iExtend
+#
+# IMPORTANT LIMITATION:
+#   AppImage CANNOT install the evdi kernel module. This AppImage works only on:
+#     (a) machines that already have iextend-evdi-dkms installed and the
+#         module loaded (dkms status shows: iextend-evdi, installed), OR
+#     (b) a future user-space-only mode using the PipeWire screencast portal
+#         directly (read-only mirror, no virtual monitor creation).
+#   For most users, prefer the .deb or .rpm packages — they handle the DKMS
+#   module and MOK enrollment automatically.
+#
+# Usage:
+#   appimage-builder --recipe host/installer/linux/AppImage.yml
+#
+# The recipe targets Ubuntu 24.04 (Noble) as the base; the resulting AppImage
+# runs on any glibc >= 2.38 system (Ubuntu 22.04+, Fedora 39+, Debian 12+).
+
+version: 1
+
+script:
+  - cd host && cargo build --release --workspace
+
+AppDir:
+  path: ./AppDir
+
+  app_info:
+    id: example.iextend
+    name: iExtend
+    icon: iextend
+    version: 0.1.0
+    exec: usr/bin/iextend-tray
+    exec_args: $@
+
+  apt:
+    arch: amd64
+    sources:
+      - sourceline: deb http://archive.ubuntu.com/ubuntu/ noble main universe
+        key_url: https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3B4FE6ACC0B21F32
+    include:
+      - libpipewire-0.3-0
+      - libdrm2
+      - libglib2.0-0
+      - libcairo2
+      - libpango-1.0-0
+      - libatk1.0-0
+      - libgdk-pixbuf-2.0-0
+      - libgtk-3-0
+    exclude:
+      # Strip heavy optional GTK themes
+      - adwaita-icon-theme
+
+  files:
+    include:
+      - host/target/release/iextendd:usr/bin/iextendd
+      - host/target/release/iextend-tray:usr/bin/iextend-tray
+      - host/installer/linux/debian/iextend.desktop:usr/share/applications/iextend.desktop
+    exclude:
+      - usr/share/man
+      - usr/share/doc
+      - usr/share/locale
+      - usr/share/gtk-doc
+
+  runtime:
+    env:
+      APPDIR: '${APPDIR}'
+      PATH: '${APPDIR}/usr/bin:${PATH}'
+      XDG_DATA_DIRS: '${APPDIR}/usr/share:${XDG_DATA_DIRS}'
+
+AppImage:
+  arch: x86_64
+  # zsync delta-update support: lets existing AppImage users download only the
+  # changed bytes when a new release is published.
+  update-information: gh-releases-zsync|iextend|iextend|latest|iExtend-*x86_64.AppImage.zsync
+  sign-key: None

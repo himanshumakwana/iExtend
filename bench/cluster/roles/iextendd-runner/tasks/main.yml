@@ -1,0 +1,196 @@
+# bench/cluster/roles/iextendd-runner/tasks/main.yml
+# Install the iextendd daemon from the latest signed release package, register
+# a GitHub Actions self-hosted runner, and configure both as auto-start services.
+#
+# Variables expected (set in inventory.yml or group_vars/all.yml):
+#   github_runner_org     — GitHub organisation slug
+#   github_runner_token   — short-lived registration token (from `gh api ...`)
+#   github_runner_labels  — comma-separated extra labels appended to default set
+#   iextend_deb_url       — (Linux) URL of the signed .deb from the release page
+#   iextend_msix_url      — (Windows) URL of the signed .msix
+#   extra_runner_labels   — host-specific labels (set in inventory per host)
+---
+
+# ── Linux — install iextendd .deb ────────────────────────────────────────────
+
+- name: Download iextendd .deb (Linux)
+  ansible.builtin.get_url:
+    url: "{{ iextend_deb_url | default('https://github.com/REPLACE_WITH_OWNER/iExtend/releases/latest/download/iextendd_amd64.deb') }}"
+    dest: /tmp/iextendd.deb
+    mode: '0644'
+  when: ansible_system == 'Linux'
+  tags: [iextendd]
+
+- name: Install iextendd .deb (Linux)
+  ansible.builtin.apt:
+    deb: /tmp/iextendd.deb
+    state: present
+  when: ansible_system == 'Linux'
+  tags: [iextendd]
+
+- name: Install VAAPI runtime (Linux AMD/Intel)
+  ansible.builtin.apt:
+    name:
+      - libva-drm2
+      - libva2
+      - vainfo
+    state: present
+  when:
+    - ansible_system == 'Linux'
+    - vaapi_available | default(false)
+  tags: [gpu]
+
+- name: Add kisak-mesa PPA (Linux AMD RX 7600)
+  ansible.builtin.apt_repository:
+    repo: ppa:kisak/kisak-mesa
+    state: present
+    update_cache: true
+  when:
+    - ansible_system == 'Linux'
+    - gpu_vendor | default('') == 'amd'
+  tags: [gpu]
+
+- name: Enable and start iextendd service (Linux)
+  ansible.builtin.systemd:
+    name: iextendd
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: ansible_system == 'Linux'
+  tags: [iextendd, service]
+
+# ── Linux — GitHub Actions self-hosted runner ─────────────────────────────────
+
+- name: Create runner directory (Linux)
+  ansible.builtin.file:
+    path: /var/lib/iextend-runner/actions-runner
+    state: directory
+    owner: iextend-runner
+    group: iextend-runner
+    mode: '0755'
+  when: ansible_system == 'Linux'
+  tags: [runner]
+
+- name: Download GitHub Actions runner tarball (Linux)
+  ansible.builtin.get_url:
+    url: "https://github.com/actions/runner/releases/latest/download/actions-runner-linux-x64-2.317.0.tar.gz"
+    dest: /tmp/actions-runner.tar.gz
+    mode: '0644'
+  when: ansible_system == 'Linux'
+  tags: [runner]
+
+- name: Extract GitHub Actions runner (Linux)
+  ansible.builtin.unarchive:
+    src: /tmp/actions-runner.tar.gz
+    dest: /var/lib/iextend-runner/actions-runner
+    remote_src: true
+    owner: iextend-runner
+    group: iextend-runner
+  when: ansible_system == 'Linux'
+  tags: [runner]
+
+- name: Register GitHub Actions runner (Linux)
+  ansible.builtin.command:
+    cmd: >
+      ./config.sh
+      --url https://github.com/{{ github_runner_org }}
+      --token {{ github_runner_token }}
+      --name {{ inventory_hostname }}
+      --labels iextend-bench,{{ extra_runner_labels | default('linux') }}
+      --unattended
+      --replace
+    chdir: /var/lib/iextend-runner/actions-runner
+  become: true
+  become_user: iextend-runner
+  changed_when: true
+  when:
+    - ansible_system == 'Linux'
+    - github_runner_token is defined
+  tags: [runner]
+
+- name: Install runner as systemd service (Linux)
+  ansible.builtin.command:
+    cmd: ./svc.sh install iextend-runner
+    chdir: /var/lib/iextend-runner/actions-runner
+  changed_when: true
+  when: ansible_system == 'Linux'
+  tags: [runner, service]
+
+- name: Start runner service (Linux)
+  ansible.builtin.command:
+    cmd: ./svc.sh start
+    chdir: /var/lib/iextend-runner/actions-runner
+  changed_when: true
+  when: ansible_system == 'Linux'
+  tags: [runner, service]
+
+# ── Windows — install iextendd .msix ─────────────────────────────────────────
+
+- name: Download iextendd .msix (Windows)
+  ansible.windows.win_get_url:
+    url: "{{ iextend_msix_url | default('https://github.com/REPLACE_WITH_OWNER/iExtend/releases/latest/download/iExtend.msix') }}"
+    dest: C:\Temp\iExtend.msix
+  when: ansible_system == 'Win32NT'
+  tags: [iextendd]
+
+- name: Install iextendd .msix (Windows)
+  ansible.windows.win_shell: |
+    Add-AppxPackage -Path C:\Temp\iExtend.msix -ForceApplicationShutdown
+  when: ansible_system == 'Win32NT'
+  tags: [iextendd]
+
+- name: Install NVIDIA Studio driver (Win11 RTX boxes)
+  ansible.windows.win_package:
+    path: "https://us.download.nvidia.com/Windows/{{ nvidia_driver_version | default('555.85') }}/{{ nvidia_driver_version | default('555.85') }}-desktop-win11-64bit-international-dch-whql.exe"
+    state: present
+    arguments: /s /n
+  when:
+    - ansible_system == 'Win32NT'
+    - gpu_vendor | default('') == 'nvidia'
+  tags: [gpu]
+
+- name: Download GitHub Actions runner zip (Windows)
+  ansible.windows.win_get_url:
+    url: "https://github.com/actions/runner/releases/latest/download/actions-runner-win-x64-2.317.0.zip"
+    dest: C:\actions-runner.zip
+  when: ansible_system == 'Win32NT'
+  tags: [runner]
+
+- name: Extract GitHub Actions runner (Windows)
+  community.windows.win_unzip:
+    src: C:\actions-runner.zip
+    dest: C:\actions-runner
+    delete_archive: false
+  when: ansible_system == 'Win32NT'
+  tags: [runner]
+
+- name: Register GitHub Actions runner (Windows)
+  ansible.windows.win_shell: |
+    .\config.cmd `
+      --url https://github.com/{{ github_runner_org }} `
+      --token {{ github_runner_token }} `
+      --name {{ inventory_hostname }} `
+      --labels iextend-bench,{{ extra_runner_labels | default('windows') }} `
+      --unattended `
+      --replace
+  args:
+    chdir: C:\actions-runner
+  when:
+    - ansible_system == 'Win32NT'
+    - github_runner_token is defined
+  tags: [runner]
+
+- name: Install runner as Windows service (Win11)
+  ansible.windows.win_shell: .\svc.cmd install
+  args:
+    chdir: C:\actions-runner
+  when: ansible_system == 'Win32NT'
+  tags: [runner, service]
+
+- name: Start runner Windows service
+  ansible.windows.win_service:
+    name: actions.runner.{{ github_runner_org }}.{{ inventory_hostname }}
+    state: started
+    start_mode: auto
+  when: ansible_system == 'Win32NT'
+  tags: [runner, service]

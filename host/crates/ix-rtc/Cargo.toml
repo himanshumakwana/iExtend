@@ -3,12 +3,16 @@ name = "ix-rtc"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+publish = false
 
 [dependencies]
 async-trait    = { workspace = true }
 thiserror      = { workspace = true }
 tracing        = { workspace = true }
 tokio          = { workspace = true }
+bytes          = "1"
+serde          = { version = "1", features = ["derive"] }
+serde_json     = "1"
 
 # Cryptography — pinned cipher suite per Plan 7:
 #   SPAKE2-P256-SHA256-HKDF-HMAC-SHA256, AES-256-GCM cert-wrap, Ed25519 device keys.
@@ -22,6 +26,8 @@ rand_core      = { version = "0.6", features = ["std"] }
 zeroize        = "1"
 
 ix-pair-wire   = { path = "../ix-pair-wire" }
+ix-codec       = { path = "../ix-codec" }
 
 [dev-dependencies]
 hex            = "0.4"
+tokio          = { workspace = true, features = ["test-util"] }

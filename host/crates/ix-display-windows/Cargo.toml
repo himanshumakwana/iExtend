@@ -1,9 +1,39 @@
 [package]
-name = "ix-display-windows"
-version.workspace = true
-edition.workspace = true
+name    = "ix-display-windows"
+version.workspace   = true
+edition.workspace   = true
 rust-version.workspace = true
+description = "Windows IddCx virtual display + DXGI capture backend for iExtend"
 
 [target.'cfg(windows)'.dependencies]
+# Windows API bindings (COM, DXGI, D3D11, kernel32, etc.)
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_System_IO",
+    "Win32_System_Threading",
+    "Win32_Security",
+    "Win32_System_SystemServices",
+    "Win32_System_WindowsProgramming",
+] }
+tokio     = { workspace = true }
 thiserror = { workspace = true }
 tracing   = { workspace = true }
+
+# ix-display provides the shared DisplaySource trait + GpuFrame types.
+ix-display = { path = "../ix-display" }
+
+[target.'cfg(windows)'.build-dependencies]
+# bindgen is only needed on Windows where Public.h is reachable from WDK.
+# On Linux the crate compiles empty via #![cfg(windows)] — bindgen not invoked.
+bindgen = { version = "0.69", optional = true }
+
+[features]
+# Enable `bindgen` to regenerate iexdd_sys.rs from Public.h.
+# Not enabled by default — the checked-in generated file is used instead.
+bindgen-regen = ["bindgen"]
+
+[dev-dependencies]
+tokio = { workspace = true }

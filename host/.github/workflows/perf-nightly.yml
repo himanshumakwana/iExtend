@@ -1,0 +1,184 @@
+# .github/workflows/perf-nightly.yml — nightly synthetic latency soak
+#
+# Runs a 30-minute extended version of the synthetic_latency integration test
+# every night, computes p50/p95/p99 deltas vs the previous nightly run, and
+# posts a comment on the most-recently merged PR.
+#
+# The perf history is persisted as `.perf-history.json` (last 60 runs) committed
+# back to main.  The file is intentionally small so it doesn't balloon the repo.
+#
+# Triggered by:
+#   - schedule: 07:17 UTC daily (off-peak for free GitHub runners)
+#   - workflow_dispatch: for on-demand hand-triggered runs
+
+name: perf-nightly
+
+on:
+  schedule:
+    - cron: '17 7 * * *'   # 07:17 UTC — off-peak for free runners
+  workflow_dispatch:
+
+jobs:
+  long-soak-synthetic:
+    name: 30-min synthetic latency soak
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout (full history for git push)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artefacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: host
+
+      - name: Install software-encode system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libx265-dev libdrm-dev pkg-config
+
+      - name: Run 30-minute synthetic soak
+        working-directory: host
+        env:
+          IX_SOAK_DURATION_SECS: "1800"
+        run: |
+          cargo test -p iextendd --test synthetic_latency --release \
+            -- --nocapture 2>&1 | tee /tmp/soak.log
+          # Preserve the exit code from cargo, not from tee
+          exit "${PIPESTATUS[0]}"
+
+      # ── Extract percentiles from test stdout ──────────────────────────────
+      - name: Extract percentiles
+        id: pct
+        if: always()
+        run: |
+          line=$(grep -E 'synthetic: p50=' /tmp/soak.log | tail -1 || true)
+          if [ -z "$line" ]; then
+            echo "p50=0" >> "$GITHUB_OUTPUT"
+            echo "p95=0" >> "$GITHUB_OUTPUT"
+            echo "p99=0" >> "$GITHUB_OUTPUT"
+            echo "no percentile line found in soak log" >&2
+            exit 0
+          fi
+          p50=$(echo "$line" | sed -nE 's/.*p50=([0-9]+)us.*/\1/p')
+          p95=$(echo "$line" | sed -nE 's/.*p95=([0-9]+)us.*/\1/p')
+          p99=$(echo "$line" | sed -nE 's/.*p99=([0-9]+)us.*/\1/p')
+          echo "p50=${p50:-0}" >> "$GITHUB_OUTPUT"
+          echo "p95=${p95:-0}" >> "$GITHUB_OUTPUT"
+          echo "p99=${p99:-0}" >> "$GITHUB_OUTPUT"
+          echo "Extracted: p50=${p50}us p95=${p95}us p99=${p99}us"
+
+      # ── Compute delta vs previous run using JS in-runner ─────────────────
+      - name: Compute delta vs previous run
+        id: delta
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          P50: ${{ steps.pct.outputs.p50 }}
+          P95: ${{ steps.pct.outputs.p95 }}
+          P99: ${{ steps.pct.outputs.p99 }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = '.perf-history.json';
+            let history = [];
+            try { history = JSON.parse(fs.readFileSync(path, 'utf8')); } catch (_) {}
+
+            const today = {
+              date: new Date().toISOString().slice(0, 10),
+              run_id: context.runId,
+              p50: Number(process.env.P50),
+              p95: Number(process.env.P95),
+              p99: Number(process.env.P99),
+            };
+            const prev = history.length > 0 ? history[history.length - 1] : null;
+
+            // Keep only the last 60 days of history.
+            history.push(today);
+            history = history.slice(-60);
+            fs.writeFileSync(path, JSON.stringify(history, null, 2) + '\n');
+
+            const result = {
+              today,
+              prev,
+              dp50: prev ? today.p50 - prev.p50 : null,
+              dp95: prev ? today.p95 - prev.p95 : null,
+              dp99: prev ? today.p99 - prev.p99 : null,
+            };
+            core.setOutput('result', JSON.stringify(result));
+            return result;
+
+      # ── Post comment on most-recently merged PR ───────────────────────────
+      - name: Comment on most-recent merged PR
+        if: always() && steps.delta.outputs.result != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            // Find the most-recently merged PR.
+            const merged = await github.rest.pulls.list({
+              owner, repo,
+              state: 'closed',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 20,
+            });
+            const pr = merged.data.find(p => p.merged_at);
+            if (!pr) {
+              console.log('No merged PR found — skipping comment.');
+              return;
+            }
+
+            const d = JSON.parse('${{ steps.delta.outputs.result }}');
+
+            const fmtMs = (us) =>
+              us == null ? 'n/a' : `${(us / 1000).toFixed(2)} ms`;
+            const fmtDelta = (us) => {
+              if (us == null) return 'first run';
+              const sign = us > 0 ? '+' : '';
+              return `${sign}${(us / 1000).toFixed(2)} ms`;
+            };
+
+            const body = [
+              '## perf-nightly delta',
+              '',
+              `_Synthetic loopback (30 min), ${d.today.date}, ` +
+                `[run #${d.today.run_id}](${context.serverUrl}/${owner}/${repo}/actions/runs/${d.today.run_id})._`,
+              '',
+              '| | yesterday | today | Δ |',
+              '|---|---|---|---|',
+              `| p50 | ${fmtMs(d.prev?.p50)} | ${fmtMs(d.today.p50)} | ${fmtDelta(d.dp50)} |`,
+              `| p95 | ${fmtMs(d.prev?.p95)} | ${fmtMs(d.today.p95)} | ${fmtDelta(d.dp95)} |`,
+              `| p99 | ${fmtMs(d.prev?.p99)} | ${fmtMs(d.today.p99)} | ${fmtDelta(d.dp99)} |`,
+              '',
+              '> Thresholds: p50 ≤ 12 ms · p95 ≤ 22 ms · p99 ≤ 30 ms.',
+              '> This is an in-process synthetic measurement; see `bench/camera-rig/` for true photon-to-photon data.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner, repo,
+              issue_number: pr.number,
+              body,
+            });
+            console.log(`Commented on PR #${pr.number}: ${pr.title}`);
+
+      # ── Persist updated perf history to main ─────────────────────────────
+      - name: Persist perf history
+        if: always()
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add .perf-history.json
+          if git diff --cached --quiet; then
+            echo "No perf history change to commit."
+          else
+            git commit -m "chore: perf-nightly history $(date -u +%Y-%m-%d) [skip ci]"
+            git push origin HEAD:main || echo "push failed — concurrent update? retrying is safe."
+          fi

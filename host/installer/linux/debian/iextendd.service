@@ -1,0 +1,25 @@
+[Unit]
+Description=iExtend daemon — virtual display and WebRTC pipeline
+Documentation=https://iextend.example/docs
+After=network-online.target graphical-session.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/iextendd
+Restart=on-failure
+RestartSec=5
+# Cap the daemon's impact on interactive workloads
+Nice=5
+# Log everything through the journal; no separate log file needed
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=iextendd
+# Security hardening: restrict write access to home and /tmp
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

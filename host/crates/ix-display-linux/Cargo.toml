@@ -3,7 +3,43 @@ name = "ix-display-linux"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license = "Apache-2.0"
 
+[dependencies]
+ix-display     = { path = "../ix-display" }
+
+# dlopen2 0.8 — loads libevdi.so.0 and libcuda.so.1 at runtime so we never
+# statically link GPL or proprietary code.
+dlopen2        = "0.8"
+
+# Async runtime + synchronisation primitives.
+tokio          = { workspace = true }
+
+# Wayland: xdg-desktop-portal screencast + PipeWire DMA-BUF delivery.
+# We gate the heavy PipeWire dependency behind the "wayland" feature so the
+# crate can be built on systems that only ship X11 headers.
+ashpd          = { version = "0.9", default-features = false, features = ["async-std"] }
+
+# X11: shared-memory images + damage-rect tracking.
+x11rb          = { version = "0.13", features = ["randr", "damage", "shm", "allow-unsafe-code"] }
+
+# SPSC ring buffer shared with the Windows backend.
+crossbeam      = "0.8"
+
+# Error-handling ergonomics.
+thiserror      = { workspace = true }
+anyhow         = { workspace = true }
+
+# Structured logging used throughout.
+tracing        = { workspace = true }
+
+# libc for shmget / shmat on Linux.
 [target.'cfg(unix)'.dependencies]
-thiserror = { workspace = true }
-tracing   = { workspace = true }
+libc           = "0.2"
+
+[features]
+# Gates tests that need the real evdi kernel module + a graphical session.
+integration = []
+
+[lib]
+path = "src/lib.rs"

@@ -1,0 +1,30 @@
+#!/bin/sh
+# debian/prerm — pre-removal script for iextend
+#
+# Runs before files are removed.  Disables the systemd user unit so it no
+# longer auto-starts for any user.
+
+set -e
+
+case "$1" in
+    remove|deconfigure)
+        if systemctl --version >/dev/null 2>&1; then
+            # Stop and disable the per-user daemon for every active user session
+            systemctl --global disable --now iextendd.service 2>/dev/null || true
+        fi
+        ;;
+
+    upgrade|failed-upgrade)
+        # On upgrade, dpkg calls prerm of the old version with "upgrade <newver".
+        # We leave the service running so the new postinst can re-enable it.
+        ;;
+
+    *)
+        echo "prerm called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

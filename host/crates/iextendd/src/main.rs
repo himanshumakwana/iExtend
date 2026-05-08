@@ -1,6 +1,8 @@
+mod cursor_protocol;
 mod grpc_server;
 mod keystore;
 mod pair_listener;
+mod session;
 mod transport;
 
 use ix_transport::LocalEndpoint;

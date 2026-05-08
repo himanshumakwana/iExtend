@@ -1,0 +1,46 @@
+#!/bin/sh
+# debian/postinst — post-installation script for iextend
+#
+# Runs after all files are unpacked.  Enables the systemd user unit globally
+# so it starts for every user at their next login.
+#
+# DEBHELPER token below is expanded by dh_installinit / dh_installsystemduser.
+
+set -e
+
+case "$1" in
+    configure)
+        # Enable the iextendd user service globally so it auto-starts at login
+        # for every user on the machine.  Individual users can still disable it
+        # with: systemctl --user disable iextendd.service
+        if systemctl --version >/dev/null 2>&1; then
+            systemctl --global enable iextendd.service || true
+        fi
+
+        # Run MOK enrollment helper if evdi-dkms installed its key already.
+        # If the key is not yet present, the helper exits silently — the evdi-
+        # dkms postinst will call it after generating the key.
+        MOK_HELPER=/usr/share/iextend/dkms-mok-enrollment.sh
+        if [ -x "$MOK_HELPER" ]; then
+            "$MOK_HELPER" || true
+        fi
+
+        echo ""
+        echo "iExtend installed successfully."
+        echo "Log out and back in to start the tray application,"
+        echo "or run: systemctl --user start iextendd.service"
+        echo ""
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

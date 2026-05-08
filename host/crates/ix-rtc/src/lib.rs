@@ -4,8 +4,25 @@
 
 #![deny(missing_docs)]
 
+// ── Plan 7 modules (pairing, replay) ───────────────────────────────────────
+/// SPAKE2-P256 pairing server + AEAD-wrapped device-cert exchange.
 pub mod pairing;
+/// Per-DataChannel sliding-window replay protection.
 pub mod replay;
+
+// ── Plan 5 modules (peer, signaling, channels, bitrate, heartbeat) ─────────
+/// WebRTC peer connection — owns video track and DataChannels.
+pub mod peer;
+/// SDP offer/answer + cert-pinning hook.
+pub mod signaling;
+/// Typed input + control DataChannel wrappers.
+pub mod channels;
+/// Transport-CC → encoder bitrate controller (proportional, deadband, slew).
+pub mod bitrate_controller;
+/// 250 ms heartbeat; 4 missed = 1 s disconnect detection.
+pub mod heartbeat;
+
+pub use peer::Peer;
 
 use thiserror::Error;
 
@@ -18,6 +35,9 @@ pub enum RtcError {
     /// Pairing failed; see inner.
     #[error("pairing: {0}")]
     Pairing(#[from] pairing::PairingError),
+    /// Remote certificate not in pinned set.
+    #[error("remote certificate not in pinned set")]
+    CertNotPinned,
 }
 
 /// Connection-level state machine matching spec §9. Mirrored on the iPad as

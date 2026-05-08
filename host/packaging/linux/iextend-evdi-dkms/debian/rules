@@ -1,0 +1,29 @@
+#!/usr/bin/make -f
+# Debian rules file for iextend-evdi-dkms.
+#
+# This is a noarch source-only package: we do not compile anything at
+# package-build time.  DKMS performs the compilation at install time
+# against the user's running kernel.
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# Nothing to build — DKMS handles compilation at install time.
+
+override_dh_auto_install:
+	# Install the evdi source tree under /usr/src.
+	install -d debian/iextend-evdi-dkms/usr/src/iextend-evdi-1.14.7
+	cp -r evdi-src/. \
+	      debian/iextend-evdi-dkms/usr/src/iextend-evdi-1.14.7/
+	install -Dm644 debian/dkms.conf \
+	               debian/iextend-evdi-dkms/usr/src/iextend-evdi-1.14.7/dkms.conf
+	# Install the module-signing helper script.
+	install -Dm755 debian/sign-evdi-module.sh \
+	               debian/iextend-evdi-dkms/usr/lib/iextend/sign-evdi-module.sh
+
+override_dh_auto_test:
+	# No automated tests at package-build time.
+
+override_dh_strip:
+	# No binaries to strip (noarch source package).

@@ -1,0 +1,114 @@
+# bench/cluster/roles/base/tasks/main.yml
+# Common baseline configuration for all four hardware-CI boxes.
+# Applied before any iExtend-specific setup.
+#
+# Tasks:
+#   - Set system hostname to match inventory_hostname
+#   - Configure NTP (chrony on Linux, W32TM policy on Windows)
+#   - Disable OS auto-update reboots (so CI runs don't get interrupted)
+#   - Ensure SSH keep-alive settings are tuned for long CI jobs
+#   - Create the iextend-runner user (idempotent)
+---
+
+# ── Linux tasks ──────────────────────────────────────────────────────────────
+
+- name: Set hostname (Linux)
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+    use: systemd
+  when: ansible_system == 'Linux'
+  tags: [hostname]
+
+- name: Ensure chrony is installed (Linux)
+  ansible.builtin.apt:
+    name: chrony
+    state: present
+    update_cache: true
+  when: ansible_system == 'Linux'
+  tags: [ntp]
+
+- name: Enable and start chronyd (Linux)
+  ansible.builtin.systemd:
+    name: chronyd
+    state: started
+    enabled: true
+  when: ansible_system == 'Linux'
+  tags: [ntp]
+
+- name: Install build-essential + pkg-config (Linux)
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - pkg-config
+      - curl
+      - git
+      - ca-certificates
+      - libdrm-dev
+    state: present
+  when: ansible_system == 'Linux'
+  tags: [deps]
+
+- name: Disable unattended-upgrades auto-reboot (Linux)
+  ansible.builtin.lineinfile:
+    path: /etc/apt/apt.conf.d/50unattended-upgrades
+    regexp: '^//Unattended-Upgrade::Automatic-Reboot '
+    line: 'Unattended-Upgrade::Automatic-Reboot "false";'
+    create: false
+  when: ansible_system == 'Linux'
+  tags: [autoupdate]
+
+- name: Ensure iextend-runner user exists (Linux)
+  ansible.builtin.user:
+    name: iextend-runner
+    system: true
+    shell: /bin/bash
+    home: /var/lib/iextend-runner
+    create_home: true
+    groups: plugdev,video
+    append: true
+  when: ansible_system == 'Linux'
+  tags: [user]
+
+# ── Windows tasks ─────────────────────────────────────────────────────────────
+
+- name: Disable Windows Update automatic reboot (Win11)
+  community.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU
+    name: NoAutoRebootWithLoggedOnUsers
+    data: 1
+    type: dword
+  when: ansible_system == 'Win32NT'
+  tags: [autoupdate]
+
+- name: Configure W32TM to sync from pool.ntp.org (Win11)
+  ansible.windows.win_command: >
+    w32tm /config /manualpeerlist:pool.ntp.org /syncfromflags:manual /reliable:YES /update
+  changed_when: true
+  when: ansible_system == 'Win32NT'
+  tags: [ntp]
+
+- name: Restart Windows Time service
+  ansible.windows.win_service:
+    name: w32tm
+    state: restarted
+  when: ansible_system == 'Win32NT'
+  tags: [ntp]
+
+- name: Ensure iextend-runner local account exists (Win11)
+  ansible.windows.win_user:
+    name: iextend-runner
+    state: present
+    password_never_expires: true
+    user_cannot_change_password: true
+    groups:
+      - Administrators
+  when: ansible_system == 'Win32NT'
+  tags: [user]
+
+- name: Enable OpenSSH server service (Win11)
+  ansible.windows.win_service:
+    name: sshd
+    state: started
+    start_mode: auto
+  when: ansible_system == 'Win32NT'
+  tags: [ssh]

@@ -1,0 +1,100 @@
+; iexdd.inf — iExtend Indirect Display Driver
+;
+; Install via:
+;   pnputil /add-driver iexdd.inf /install
+;   devcon install iexdd.inf Root\iExtendDisplay
+;
+; Remove via:
+;   devcon remove Root\iExtendDisplay
+;   pnputil /delete-driver iexdd.inf /uninstall
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = Display
+ClassGuid   = {4d36e968-e325-11ce-bfc1-08002be10318}
+Provider    = %ProviderName%
+DriverVer   = ; populated by stampinf at MSBuild time
+CatalogFile = iexdd.cat
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13   ; DriverStore — mandatory for PnpLockdown=1
+
+[SourceDisksNames]
+1 = %DiskName%,,,"."
+
+[SourceDisksFiles]
+iexdd.sys = 1
+
+; ---------------------------------------------------------------------------
+; Manufacturer and device sections
+; ---------------------------------------------------------------------------
+
+[Manufacturer]
+%ManufacturerName% = Standard, NTamd64.10.0...22000
+
+; Target: Windows 11 (build 22000+), 64-bit only.
+; IddCx 1.10 is available from Windows 11 22H2 onward (build 22621).
+[Standard.NTamd64.10.0...22000]
+%DeviceName% = Iexdd_Install, Root\iExtendDisplay
+
+; ---------------------------------------------------------------------------
+; Install sections
+; ---------------------------------------------------------------------------
+
+[Iexdd_Install.NT]
+CopyFiles = Iexdd_CopyFiles
+
+[Iexdd_CopyFiles]
+iexdd.sys
+
+[Iexdd_Install.NT.HW]
+AddReg = Iexdd_HW_AddReg
+
+[Iexdd_HW_AddReg]
+; Prevent user-mode processes from sending arbitrary IOCTLs to the device.
+HKR,,"Security",,"D:P(A;;GA;;;SY)(A;;GA;;;BA)"
+
+; ---------------------------------------------------------------------------
+; Service installation
+; ---------------------------------------------------------------------------
+
+[Iexdd_Install.NT.Services]
+AddService = iexdd, %SPSVCINST_ASSOCSERVICE%, Iexdd_Service_Install
+
+[Iexdd_Service_Install]
+DisplayName    = %ServiceName%
+ServiceType    = 1   ; SERVICE_KERNEL_DRIVER
+StartType      = 3   ; SERVICE_DEMAND_START
+ErrorControl   = 1   ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\iexdd.sys
+AddReg         = Iexdd_Service_AddReg
+
+[Iexdd_Service_AddReg]
+HKR,, "BootFlags",      %REG_DWORD%, 0x14
+HKR,, "CoInstallers32", %REG_MULTI_SZ%, "IddCx.dll,IddCxCoInstaller"
+
+; ---------------------------------------------------------------------------
+; WPP tracing registration
+; ---------------------------------------------------------------------------
+
+[Iexdd_Install.NT.WDF]
+KmdfService = iexdd, Iexdd_KMDF
+
+[Iexdd_KMDF]
+KmdfLibraryVersion = 1.33
+
+; ---------------------------------------------------------------------------
+; Strings
+; ---------------------------------------------------------------------------
+
+[Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
+REG_DWORD              = 0x00010001
+REG_MULTI_SZ           = 0x00010000
+
+ProviderName     = "iExtend Project"
+ManufacturerName = "iExtend Project"
+DiskName         = "iExtend Driver Installation Disk"
+DeviceName       = "iExtend Virtual Display"
+ServiceName      = "iExtend IDD Service"

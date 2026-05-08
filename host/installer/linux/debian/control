@@ -1,0 +1,36 @@
+Source: iextend
+Section: utils
+Priority: optional
+Maintainer: iExtend <maintainers@iextend.example>
+Build-Depends: debhelper-compat (= 13),
+               cargo (>= 1.75),
+               pkg-config,
+               libpipewire-0.3-dev,
+               libdrm-dev,
+               protobuf-compiler
+Standards-Version: 4.6.0
+Homepage: https://iextend.example
+Vcs-Git: https://github.com/iextend/iextend.git
+Vcs-Browser: https://github.com/iextend/iextend
+Rules-Requires-Root: no
+
+Package: iextend
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         iextend-evdi-dkms (>= 0.1),
+         systemd-user-services,
+         libpipewire-0.3-0
+Recommends: pipewire (>= 0.3.40)
+Suggests: iextend-evdi-dkms
+Description: iPad as a wireless second screen for Linux
+ iExtend turns an iPad into a wireless second monitor over Wi-Fi or
+ USB-C, with Apple Pencil pressure and tilt forwarded as a Wacom-class
+ stylus.
+ .
+ The iextendd daemon manages the virtual display (via EVDI kernel module)
+ and the WebRTC video pipeline. The iextend-tray system-tray application
+ handles pairing and display configuration.
+ .
+ Note: the EVDI kernel module (iextend-evdi-dkms package) must be built
+ and loaded for virtual monitor creation. On SecureBoot systems, a one-time
+ MOK enrollment step is required after package installation.

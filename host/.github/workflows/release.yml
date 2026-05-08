@@ -1,0 +1,215 @@
+# .github/workflows/release.yml — iExtend release pipeline
+#
+# Triggered by any tag matching v* (e.g. v0.1.0, v1.2.3-rc1).
+# Runs three jobs in parallel:
+#   windows — builds + signs the MSIX package
+#   linux   — builds .deb, .rpm, and AppImage
+#   ipad    — builds IPA and pushes to TestFlight via fastlane
+#
+# All three artifacts are uploaded to the GitHub Release that corresponds
+# to the triggering tag.
+#
+# Required repository secrets:
+#   IEXTEND_EV_THUMBPRINT         — EV Authenticode cert thumbprint (no spaces)
+#   MATCH_PASSWORD                — fastlane match keychain passphrase
+#   MATCH_GIT_URL                 — URL of the private match cert repo
+#   APPLE_ID                      — Apple ID email for App Store Connect
+#   APPLE_TEAM_ID                 — 10-char developer team ID
+#   APPLE_ITC_TEAM_ID             — App Store Connect numeric team ID
+#   FASTLANE_APP_SPECIFIC_PASSWORD — generated at appleid.apple.com
+#
+# Windows runner note:
+#   The EV Authenticode cert lives on a SafeNet hardware USB token.
+#   GitHub-hosted runners do NOT support USB hardware tokens.
+#   Options:
+#     (a) Self-hosted Windows runner with the token plugged in (v1 approach).
+#     (b) DigiCert KeyLocker (cloud HSM) + azuresigntool (~$500/yr extra).
+#   Until (b) is set up, the windows job requires a self-hosted runner tagged
+#   with `ev-token`.  Change `runs-on` below when migrating to KeyLocker.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Strip 'v' from tag to get a bare semver for use in filenames
+env:
+  VERSION: ${{ github.ref_name }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Windows — MSIX + EV Authenticode signing
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Windows MSIX
+    # CHANGE THIS to `windows-latest` once DigiCert KeyLocker is configured.
+    # Until then, requires a self-hosted runner with `ev-token` label and the
+    # SafeNet hardware token plugged in.
+    runs-on: [self-hosted, windows, ev-token]
+    env:
+      IEXTEND_EV_THUMBPRINT: ${{ secrets.IEXTEND_EV_THUMBPRINT }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: host
+
+      - name: Strip 'v' from tag
+        id: ver
+        shell: pwsh
+        run: |
+          $bare = '${{ github.ref_name }}'.TrimStart('v')
+          # MSIX version must be 4-part: append .0 if needed
+          $parts = $bare -split '\.' | Select-Object -First 3
+          while ($parts.Count -lt 3) { $parts += '0' }
+          $msixVer = ($parts -join '.') + '.0'
+          echo "bare=$bare" >> $env:GITHUB_OUTPUT
+          echo "msix=$msixVer" >> $env:GITHUB_OUTPUT
+
+      - name: Build + sign MSIX
+        shell: pwsh
+        run: |
+          cd host\installer\windows
+          .\build.ps1 -Version '${{ steps.ver.outputs.msix }}'
+
+      - name: Upload MSIX to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: host/installer/windows/dist/*.msix
+          fail_on_unmatched_files: true
+
+  # ---------------------------------------------------------------------------
+  # Linux — .deb, .rpm, AppImage
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Linux packages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            debhelper \
+            rpm \
+            appimage-builder \
+            libpipewire-0.3-dev \
+            libdrm-dev \
+            pkg-config \
+            protobuf-compiler \
+            dkms
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: host
+
+      - name: Build .deb
+        working-directory: host
+        run: |
+          dpkg-buildpackage -b -uc -us
+          # Produced file lands one directory up from host/
+          ls -la ../iextend_*.deb
+
+      - name: Lint .deb (warnings only)
+        run: |
+          sudo apt-get install -y lintian || true
+          lintian ../iextend_*.deb --no-tag-display-limit || true
+
+      - name: Build .rpm (via rpmbuild in a container)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            fedora:latest \
+            bash -c "
+              dnf install -y cargo rust rpm-build pkgconfig pipewire-devel \
+                libdrm-devel protobuf-compiler && \
+              rpmbuild -bb \
+                --define '_topdir /workspace/rpmbuild' \
+                host/installer/linux/rpm/iextend.spec
+            "
+          ls rpmbuild/RPMS/x86_64/iextend-*.rpm
+
+      - name: Build AppImage
+        run: |
+          appimage-builder \
+            --recipe host/installer/linux/AppImage.yml \
+            --skip-test
+          ls iExtend-*.AppImage
+
+      - name: Upload Linux artifacts to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ../iextend_*.deb
+            rpmbuild/RPMS/x86_64/iextend-*.rpm
+            iExtend-*.AppImage
+          fail_on_unmatched_files: true
+
+  # ---------------------------------------------------------------------------
+  # iPad — TestFlight via fastlane
+  # ---------------------------------------------------------------------------
+  ipad:
+    name: iPad TestFlight
+    runs-on: macos-latest
+
+    env:
+      MATCH_PASSWORD:                   ${{ secrets.MATCH_PASSWORD }}
+      MATCH_GIT_URL:                    ${{ secrets.MATCH_GIT_URL }}
+      APPLE_ID:                         ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID:                    ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_ITC_TEAM_ID:                ${{ secrets.APPLE_ITC_TEAM_ID }}
+      FASTLANE_APP_SPECIFIC_PASSWORD:   ${{ secrets.FASTLANE_APP_SPECIFIC_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode (latest stable)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Set up Ruby + Bundler
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: ipad/installer/AppStoreConnect
+
+      - name: Push to TestFlight
+        working-directory: ipad/installer/AppStoreConnect
+        run: bundle exec fastlane beta
+
+      # The IPA is not uploaded to the GitHub Release; it lives in TestFlight.
+      # If you also want a downloadable IPA artifact (e.g. for sideloading via
+      # AltStore), uncomment the step below.
+      #
+      # - name: Upload IPA to Release
+      #   uses: softprops/action-gh-release@v2
+      #   with:
+      #     files: ipad/installer/AppStoreConnect/build/iExtend.ipa

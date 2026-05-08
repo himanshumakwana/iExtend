@@ -1,0 +1,16 @@
+[package]
+name    = "xtask"
+version = "0.1.0"
+edition = "2021"
+# xtask is a build/dev tool, not a shipping artifact — no workspace.package fields.
+publish = false
+description = "cargo xtask orchestration: Windows driver build, sign, install, trace"
+
+[dependencies]
+anyhow   = "1"
+clap     = { version = "4", features = ["derive"] }
+camino   = "1"
+ctrlc    = "3"
+
+[lints.rust]
+unused_imports = "warn"

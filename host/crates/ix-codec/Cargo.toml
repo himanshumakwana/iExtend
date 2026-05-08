@@ -3,8 +3,24 @@ name = "ix-codec"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+publish = false
 
 [dependencies]
 async-trait = { workspace = true }
 thiserror   = { workspace = true }
 tracing     = { workspace = true }
+ix-display  = { path = "../ix-display" }
+bytes       = "1"
+openh264    = { version = "0.6", optional = true }
+
+[dev-dependencies]
+proptest = "1"
+
+[features]
+default = ["sw-only"]
+sw-only = ["openh264"]
+nvenc   = []
+qsv     = []
+amf     = []
+vaapi   = []
+all-codecs = ["nvenc", "qsv", "amf", "vaapi", "sw-only"]

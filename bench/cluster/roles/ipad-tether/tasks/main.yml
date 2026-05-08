@@ -1,0 +1,114 @@
+# bench/cluster/roles/ipad-tether/tasks/main.yml
+# Documents and verifies the one-time iPad pairing step.
+#
+# The SPAKE2 PIN-based pairing flow (Plan 7) requires a human to:
+#   1. Open the iExtend app on the iPad.
+#   2. Tap "Pair new host".
+#   3. Enter the 6-digit PIN displayed by `iextendd ctl pair-start` on the host.
+# This cannot be automated without physical access; these tasks instead produce a
+# per-host checklist and verify (via iextend-ctl) that a paired iPad is reachable
+# after the human has completed the manual step.
+#
+# Variables expected (set per-host in inventory.yml):
+#   ipad_serial     — iPad serial number (from Settings → General → About)
+#   ipad_model      — friendly model string e.g. "iPad Pro 11 M2"
+---
+
+- name: Print pairing checklist for {{ inventory_hostname }}
+  ansible.builtin.debug:
+    msg: |
+      ── iPad pairing checklist for {{ inventory_hostname }} ──────────────────
+      iPad: {{ ipad_model | default('(set ipad_model in inventory)') }}
+      Serial: {{ ipad_serial | default('(set ipad_serial in inventory)') }}
+
+      Manual steps (must be done by a person with physical access):
+        1. Factory-reset iPad → Settings → General → Transfer or Reset iPad
+        2. Set up as new. Skip Apple ID sign-in during setup.
+        3. Install iExtend.app from TestFlight (link in bench/cluster/README.md).
+        4. On the host, run:
+             iextendd ctl pair-start
+           Note the 6-digit PIN displayed.
+        5. In the iExtend app, tap "Pair with host" and enter the PIN.
+        6. Confirm "Paired" appears in both the app and the daemon log.
+        7. Disable Auto-Lock: Settings → Display & Brightness → Auto-Lock → Never.
+        8. Disable Low Power Mode: Settings → Battery → Low Power Mode → Off.
+        9. Lock device orientation: Control Center → orientation lock icon.
+       10. USB-C tether to the host's USB-C 3.2 port (the rear port on desktops).
+
+      After completing the above steps, re-run this playbook with --tags verify
+      to confirm the iPad is reachable.
+      ──────────────────────────────────────────────────────────────────────────
+  tags: [ipad, checklist]
+
+- name: Write per-host iPad pairing checklist to disk
+  ansible.builtin.copy:
+    dest: /var/lib/iextend-runner/ipad-pairing-checklist.txt
+    content: |
+      iExtend iPad pairing checklist — {{ inventory_hostname }}
+      Generated: {{ ansible_date_time.iso8601 }}
+
+      iPad model:  {{ ipad_model | default('UNKNOWN — set ipad_model in inventory') }}
+      iPad serial: {{ ipad_serial | default('UNKNOWN — set ipad_serial in inventory') }}
+
+      Status: [ ] manual steps not yet completed
+
+      See bench/cluster/README.md for the full pairing procedure.
+    owner: iextend-runner
+    mode: '0644'
+  when: ansible_system == 'Linux'
+  tags: [ipad, checklist]
+
+- name: Write per-host iPad pairing checklist to disk (Windows)
+  ansible.windows.win_copy:
+    dest: C:\iextend-runner\ipad-pairing-checklist.txt
+    content: |
+      iExtend iPad pairing checklist — {{ inventory_hostname }}
+      Generated: {{ ansible_date_time.iso8601 }}
+
+      iPad model:  {{ ipad_model | default('UNKNOWN — set ipad_model in inventory') }}
+      iPad serial: {{ ipad_serial | default('UNKNOWN — set ipad_serial in inventory') }}
+
+      Status: [ ] manual steps not yet completed
+
+      See bench/cluster/README.md for the full pairing procedure.
+  when: ansible_system == 'Win32NT'
+  tags: [ipad, checklist]
+
+# ── Verification (run after the manual pairing step) ─────────────────────────
+
+- name: Verify iextendd can see a paired iPad (Linux)
+  ansible.builtin.command:
+    cmd: iextendd ctl status --json
+  register: ctl_status
+  changed_when: false
+  failed_when: false
+  when: ansible_system == 'Linux'
+  tags: [ipad, verify]
+
+- name: Print iPad pairing status (Linux)
+  ansible.builtin.debug:
+    msg: >
+      iextend-ctl status exit={{ ctl_status.rc }}
+      stdout={{ ctl_status.stdout | default('') }}
+  when:
+    - ansible_system == 'Linux'
+    - ctl_status is defined
+  tags: [ipad, verify]
+
+- name: Verify iextendd can see a paired iPad (Windows)
+  ansible.windows.win_shell: iextendd ctl status --json
+  register: ctl_status_win
+  changed_when: false
+  failed_when: false
+  when: ansible_system == 'Win32NT'
+  tags: [ipad, verify]
+
+- name: Print iPad pairing status (Windows)
+  ansible.builtin.debug:
+    msg: >
+      iextend-ctl status exit={{ ctl_status_win.rc | default('n/a') }}
+      stdout={{ ctl_status_win.stdout | default('') }}
+  when:
+    - ansible_system == 'Win32NT'
+    - ctl_status_win is defined
+  tags: [ipad, verify]

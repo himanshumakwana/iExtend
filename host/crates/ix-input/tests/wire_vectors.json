@@ -1,0 +1,51 @@
+[
+  {
+    "name": "pencil_move_300_tilt_400_azimuth_500",
+    "description": "PencilMove, x=768.5, y=1024.25, pressure=0.3, tilt=0.4, azimuth=0.5, twist=0, seq=42, flags=predicted",
+    "kind": 17,
+    "time_us": 1700000000000000,
+    "seq": 42,
+    "flags": 1,
+    "pencil": {
+      "x": 768.5,
+      "y": 1024.25,
+      "pressure": 0.3,
+      "tilt": 0.4,
+      "azimuth": 0.5,
+      "twist": 0.0,
+      "barrel": false,
+      "hover": false
+    },
+    "expected_bytes": "1100401e18240a06002a000000010080000300400004cd4c6666ff7f00000000"
+  },
+  {
+    "name": "key_down_a",
+    "description": "KeyDown, HID usage page 7 (keyboard), usage 4 ('a'), modifiers=2 (left shift)",
+    "kind": 32,
+    "time_us": 0,
+    "seq": 1,
+    "flags": 0,
+    "key": {
+      "usage_page": 7,
+      "usage": 4,
+      "modifiers": 2
+    },
+    "expected_bytes": "2000000000000000000100000000070004000200000000000000000000000000"
+  },
+  {
+    "name": "touch_begin",
+    "description": "TouchBegin, x=100, y=200, radius_major=5, radius_minor=4, force=0.25, seq=3",
+    "kind": 1,
+    "time_us": 999,
+    "seq": 3,
+    "flags": 0,
+    "touch": {
+      "x": 100.0,
+      "y": 200.0,
+      "radius_major": 5.0,
+      "radius_minor": 4.0,
+      "force": 0.25
+    },
+    "expected_bytes": "01e7030000000000000300000000000064000000c800ff7fff7f004000000000"
+  }
+]

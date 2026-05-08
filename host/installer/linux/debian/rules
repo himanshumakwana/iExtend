@@ -1,0 +1,40 @@
+#!/usr/bin/make -f
+# debian/rules — debhelper build rules for iextend
+#
+# Uses debhelper-compat 13, cargo buildsystem.
+# Override targets are needed because the Cargo workspace lives
+# one level below the Debian source root (in host/).
+
+export DH_VERBOSE = 1
+export CARGO_HOME ?= $(CURDIR)/.cargo-home
+export DH_CARGO_PROFILE = release
+
+%:
+	dh $@ --buildsystem=cargo
+
+override_dh_auto_build:
+	cd host && cargo build --release --workspace
+
+override_dh_auto_test:
+	cd host && cargo test --release --workspace -- --test-threads=1
+
+override_dh_auto_install:
+	# Daemon binary
+	install -Dm755 host/target/release/iextendd \
+	  debian/iextend/usr/bin/iextendd
+	# Tray binary
+	install -Dm755 host/target/release/iextend-tray \
+	  debian/iextend/usr/bin/iextend-tray
+	# systemd user unit
+	install -Dm644 host/installer/linux/debian/iextendd.service \
+	  debian/iextend/usr/lib/systemd/user/iextendd.service
+	# XDG autostart entry for the tray
+	install -Dm644 host/installer/linux/debian/iextend.desktop \
+	  debian/iextend/etc/xdg/autostart/iextend.desktop
+	# MOK enrollment helper (placed where postinst can call it)
+	install -Dm755 host/installer/linux/dkms-mok-enrollment.sh \
+	  debian/iextend/usr/share/iextend/dkms-mok-enrollment.sh
+
+override_dh_auto_clean:
+	cd host && cargo clean
+	rm -rf .cargo-home

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  vhf-stylus.vcxproj — WDK kernel driver project for the iExtend virtual stylus.
+
+  Prerequisites:
+    - Visual Studio 2022 (Build Tools) with the Desktop Development with C++ workload
+    - Windows Driver Kit (WDK) 10.0.26100.0 or newer
+    - Windows SDK 10.0.26100.0 or newer (paired with WDK)
+
+  Build:
+    msbuild vhf-stylus.vcxproj /p:Configuration=Release;Platform=x64
+
+  Sign (same EV cert as Plan 3's IddCx driver):
+    signtool sign /fd sha256 /n "iExtend Contributors" /tr http://timestamp.digicert.com /td sha256
+                  x64\Release\vhf-stylus.sys
+
+  Test install (test signing mode):
+    bcdedit /set testsigning on
+    devcon install inf\vhf-stylus.inf Root\iExtendStylus
+-->
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{B4F3A1C2-D5E6-4789-A0BC-DEF012345678}</ProjectGuid>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
+    <Configuration Condition="'$(Configuration)'==''">Debug</Configuration>
+    <Platform Condition="'$(Platform)'==''">x64</Platform>
+    <RootNamespace>vhf-stylus</RootNamespace>
+    <ProjectName>vhf-stylus</ProjectName>
+    <!-- WDK driver project type GUID -->
+    <DriverType>KMDF</DriverType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+  </PropertyGroup>
+
+  <Import Project="$(WDKContentRoot)build\WindowsDriver.Default.props" />
+
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetName>vhf-stylus</TargetName>
+    <ConfigurationType>Driver</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <WDKContentRoot Condition="'$(WDKContentRoot)'==''">$(KITSROOT)</WDKContentRoot>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <TargetName>vhf-stylus</TargetName>
+    <ConfigurationType>Driver</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <WDKContentRoot Condition="'$(WDKContentRoot)'==''">$(KITSROOT)</WDKContentRoot>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="$(WDKContentRoot)build\WindowsDriver.props" />
+
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(KernelMode_IncludePath);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>vhfkm.lib;wdfsec.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EntryPointSymbol>DriverEntry</EntryPointSymbol>
+    </Link>
+    <Inf>
+      <TimeStamp>*</TimeStamp>
+      <SpecifyArchitecture>true</SpecifyArchitecture>
+      <TargetOSVersion>10.0</TargetOSVersion>
+    </Inf>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(KernelMode_IncludePath);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <Optimization>Full</Optimization>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>vhfkm.lib;wdfsec.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EntryPointSymbol>DriverEntry</EntryPointSymbol>
+    </Link>
+    <Inf>
+      <TimeStamp>*</TimeStamp>
+      <SpecifyArchitecture>true</SpecifyArchitecture>
+      <TargetOSVersion>10.0</TargetOSVersion>
+    </Inf>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <ClCompile Include="src\Driver.c" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClInclude Include="src\Driver.h" />
+    <ClInclude Include="src\hid_report.h" />
+    <ClInclude Include="src\Public.h" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Inf Include="inf\vhf-stylus.inx" />
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="$(WDKContentRoot)build\WindowsDriver.targets" />
+
+</Project>

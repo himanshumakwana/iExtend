@@ -1,0 +1,73 @@
+; vhf-stylus.inx — INF template for the iExtend Virtual Stylus driver.
+;
+; This file is processed by InfVerif and stampinf to produce vhf-stylus.inf.
+; Stamp with: stampinf -f vhf-stylus.inx -a amd64 -k 10.0 -v *
+;
+; Installation:
+;   devcon install vhf-stylus.inf Root\iExtendStylus
+;
+; Requires:
+;   - vhf-stylus.sys (this project, signed with EV cert from Plan 3)
+;   - vhf.sys        (inbox since Windows 10 1607 / WDDM 2.1)
+
+[Version]
+Signature="$Windows NT$"
+Class=HIDClass
+ClassGuid={745A17A0-74D3-11D0-B6FE-00A0C90F57DA}
+Provider=%ManufacturerName%
+CatalogFile=vhf-stylus.cat
+DriverVer=          ; stampinf fills this in
+PnpLockdown=1
+
+[DestinationDirs]
+DefaultDestDir=12   ; %SystemRoot%\System32\drivers
+
+; ── Manufacturer / Models ─────────────────────────────────────────────────────
+
+[Manufacturer]
+%ManufacturerName%=Standard,NTamd64
+
+[Standard.NTamd64]
+%DeviceName%=Install_vhfstylus,Root\iExtendStylus
+
+; ── Driver install ────────────────────────────────────────────────────────────
+
+[Install_vhfstylus.NT]
+Include=wdf01000.inf
+Needs=KMDF_Inst
+CopyFiles=Drivers_Dir
+
+[Drivers_Dir]
+vhf-stylus.sys
+
+[Install_vhfstylus.NT.Services]
+Include=wdf01000.inf
+Needs=KMDF_Inst.Services
+AddService=vhf-stylus,2,vhf_stylus_Service_Inst  ; 2 = SPSVCINST_ASSOCSERVICE
+
+[vhf_stylus_Service_Inst]
+DisplayName    = %ServiceName%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\vhf-stylus.sys
+LoadOrderGroup = Extended Base
+
+; ── KMDF co-installer ─────────────────────────────────────────────────────────
+
+[Install_vhfstylus.NT.CoInstallers]
+Include=wdf01000.inf
+Needs=KMDF_Inst.CoInstallers
+
+[Install_vhfstylus.NT.Wdf]
+KmdfService=vhf-stylus,vhf_stylus_WDF_sect
+
+[vhf_stylus_WDF_sect]
+KmdfLibraryVersion=$KMDFVERSION$   ; stampinf fills this in
+
+; ── Strings ───────────────────────────────────────────────────────────────────
+
+[Strings]
+ManufacturerName   = "iExtend Contributors"
+ServiceName        = "iExtend Virtual Stylus Driver"
+DeviceName         = "iExtend Virtual Stylus"

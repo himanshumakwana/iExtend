@@ -1,0 +1,19 @@
+iExtend turns your iPad into a wireless second screen for your Windows or Linux laptop.
+
+• Drag windows over to your iPad and keep working — it's a real second monitor, not a mirror (toggle to mirror mode anytime you want).
+• Apple Pencil pressure and tilt forwarded as a real drawing tablet — Photoshop, Krita, OneNote, Clip Studio Paint, and Affinity Designer all just work, with no extra drivers.
+• Connect over Wi-Fi or USB-C. No cables required for wireless mode.
+• No cloud account, no telemetry, no login. All communication stays on your local network.
+
+Requires the free iExtend desktop app for Windows or Linux.
+
+HOW IT WORKS
+iExtend creates a real virtual monitor on your Windows or Linux computer using a kernel-level display driver. Your desktop sees it as a second screen. The video stream is compressed with hardware H.265/AV1 and sent over WebRTC to your iPad — the same technology that powers video calls. Round-trip latency over a good Wi-Fi 6 network is under 30 ms.
+
+Apple Pencil input is captured on the iPad and forwarded to the host as a virtual Wacom-compatible stylus, giving pressure, tilt, and azimuth data to any app that reads from the standard tablet input stack.
+
+REQUIREMENTS
+• iPad with USB-C or Lightning connector (Apple Pencil support requires iPad Pro, iPad Air, or iPad mini with Pencil support)
+• iPadOS 17.0 or later
+• Wi-Fi network (both iPad and computer on the same network), or USB-C cable
+• iExtend desktop app on Windows 10 2004+ or Ubuntu 22.04+ / Fedora 39+

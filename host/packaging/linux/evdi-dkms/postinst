@@ -1,0 +1,92 @@
+#!/bin/sh
+# Debian postinst for iextend-evdi-dkms.
+#
+# Responsibilities:
+#   1. Generate the kernel-module signing key + certificate (on first install).
+#   2. If SecureBoot is active, print enrollment instructions for mokutil.
+#   3. Register with DKMS and build the module for the running kernel.
+#
+# Called by dpkg as: postinst configure <old-version>
+# Called by dpkg as: postinst triggered <trigger-name>  (for kernel upgrades)
+
+set -e
+
+KEY_DIR=/var/lib/iextend
+KEY=$KEY_DIR/MOK.priv
+CERT=$KEY_DIR/MOK.der
+PACKAGE_NAME=iextend-evdi
+PACKAGE_VERSION=1.14.7
+SIGN_SCRIPT=/usr/lib/iextend/sign-evdi-module.sh
+
+case "$1" in
+    configure)
+        # Create the key directory with strict permissions.
+        mkdir -p "$KEY_DIR"
+        chmod 700 "$KEY_DIR"
+
+        # Generate a machine-unique signing key on first install.
+        if [ ! -f "$KEY" ] || [ ! -f "$CERT" ]; then
+            echo "iextend-evdi: generating kernel-module signing certificate..."
+            openssl req -new -x509 -newkey rsa:2048 \
+                -keyout "$KEY" \
+                -outform DER -out "$CERT" \
+                -days 36500 \
+                -nodes \
+                -subj "/CN=iExtend evdi module signing key/" \
+                2>/dev/null
+            chmod 600 "$KEY"
+            echo "iextend-evdi: signing certificate written to $CERT"
+        fi
+
+        # Advise the user if SecureBoot is active.
+        if mokutil --sb-state 2>/dev/null | grep -q "SecureBoot enabled"; then
+            cat <<'MOKEOF'
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  SecureBoot is enabled on this system.                              │
+  │                                                                     │
+  │  iExtend's display driver (evdi) must be signed to load under      │
+  │  SecureBoot.  Run the following command NOW, before rebooting:      │
+  │                                                                     │
+  │    sudo mokutil --import /var/lib/iextend/MOK.der                  │
+  │                                                                     │
+  │  You will be asked to set a one-time password (8+ chars).          │
+  │  After the next reboot, the blue "MOK Manager" screen will appear: │
+  │    Enroll MOK → Continue → enter the password → Reboot.            │
+  │                                                                     │
+  │  After the second reboot iExtend will start automatically.         │
+  └─────────────────────────────────────────────────────────────────────┘
+
+MOKEOF
+        fi
+
+        # Install DKMS source and build for the running kernel.
+        if command -v dkms >/dev/null 2>&1; then
+            dkms add    -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION" --force 2>/dev/null || true
+            dkms build  -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION" \
+                        -k "$(uname -r)" 2>&1 | tail -5 || true
+            dkms install -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION" \
+                         -k "$(uname -r)" --force 2>&1 | tail -5 || true
+            # Load immediately (best-effort; may fail under SecureBoot until MOK enrolled).
+            modprobe evdi initial_device_count=1 2>/dev/null || true
+        else
+            echo "iextend-evdi: DKMS not found — module not built." >&2
+            echo "  Install dkms and re-run: sudo dpkg-reconfigure iextend-evdi-dkms" >&2
+        fi
+        ;;
+
+    triggered)
+        # Triggered by a kernel upgrade.  DKMS handles the rebuild automatically
+        # via the AUTOINSTALL flag in dkms.conf.
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

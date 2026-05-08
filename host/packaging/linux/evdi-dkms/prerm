@@ -1,0 +1,69 @@
+#!/bin/sh
+# Debian prerm for iextend-evdi-dkms.
+#
+# Responsibilities:
+#   1. Unload the evdi kernel module if loaded.
+#   2. Advise the user to revoke the MOK signing certificate.
+#   3. Deregister from DKMS (DKMS itself handles the module uninstall).
+#
+# Called by dpkg as: prerm remove
+#                    prerm upgrade <new-version>
+#                    prerm deconfigure
+
+set -e
+
+PACKAGE_NAME=iextend-evdi
+PACKAGE_VERSION=1.14.7
+CERT=/var/lib/iextend/MOK.der
+
+case "$1" in
+    remove|deconfigure)
+        # Unload the module if it is currently loaded.
+        if lsmod 2>/dev/null | grep -q "^evdi "; then
+            echo "iextend-evdi: unloading evdi kernel module..."
+            modprobe -r evdi 2>/dev/null || true
+        fi
+
+        # Remind the user to revoke the signing certificate from the MOK store.
+        if [ -f "$CERT" ] && command -v mokutil >/dev/null 2>&1; then
+            if mokutil --test-key "$CERT" 2>/dev/null | grep -q "already enrolled"; then
+                cat <<'MOKEOF'
+
+  iExtend's kernel-module signing certificate is still enrolled in your
+  Machine Owner Keys (MOK) store.
+
+  To remove it, run:
+
+    sudo mokutil --delete /var/lib/iextend/MOK.der
+
+  Then reboot and follow the blue MOK Manager prompt to complete the
+  deletion.  This is optional but recommended for security hygiene.
+
+MOKEOF
+            fi
+        fi
+
+        # Deregister from DKMS.
+        if command -v dkms >/dev/null 2>&1; then
+            dkms remove -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION" \
+                        -k "$(uname -r)" 2>/dev/null || true
+            # Remove all kernel versions.
+            dkms remove -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION" \
+                        --all 2>/dev/null || true
+        fi
+        ;;
+
+    upgrade)
+        # On upgrade DKMS handles the module replacement; nothing to do here.
+        ;;
+
+    failed-upgrade)
+        ;;
+
+    *)
+        echo "prerm called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

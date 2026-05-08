@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  iextend.appxmanifest — MSIX package manifest for iExtend
+  =========================================================
+  This is the canonical manifest committed to source control.
+  build.ps1 copies it into the staging directory and rewrites the Version
+  attribute before calling MakeAppx, so do NOT hand-edit the version here
+  during a release — drive it through build.ps1's -Version parameter.
+
+  Signing is performed by sign.ps1 via SignTool using the EV Authenticode
+  cert stored on a SafeNet hardware token (thumbprint read from the
+  IEXTEND_EV_THUMBPRINT environment variable).
+
+  Capabilities:
+    runFullTrust — required because iextendd installs and manages a kernel
+    driver via pnputil.  The package cannot be listed on the Microsoft Store
+    public catalogue with this capability; it is distributed as an
+    AppInstaller sideload URL for v1.
+-->
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+         IgnorableNamespaces="uap rescap desktop">
+
+  <!-- Identity block — Publisher CN must match the EV cert Subject exactly. -->
+  <Identity Name="iExtend.Host"
+            Publisher="CN=iExtend, O=iExtend, C=US"
+            Version="0.1.0.0"
+            ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>iExtend</DisplayName>
+    <PublisherDisplayName>iExtend</PublisherDisplayName>
+    <Logo>assets\StoreLogo.png</Logo>
+    <Description>Use your iPad as a wireless second screen for Windows.</Description>
+  </Properties>
+
+  <!-- Minimum: 2004 (19041) for IddCx 1.4 support. Tested up to 23H2. -->
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop"
+                        MinVersion="10.0.19041.0"
+                        MaxVersionTested="10.0.22631.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <!--
+      iExtend tray — the only GUI entry point. iextendd is launched as a
+      child process by the tray; it is not a separate MSIX Application entry
+      because it has no UI of its own.
+    -->
+    <Application Id="iExtendTray"
+                 Executable="iextend-tray.exe"
+                 EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="iExtend"
+                          Description="iPad as second screen"
+                          BackgroundColor="#0A84FF"
+                          Square150x150Logo="assets\Square150x150Logo.png"
+                          Square44x44Logo="assets\Square44x44Logo.png">
+        <uap:DefaultTile />
+      </uap:VisualElements>
+      <Extensions>
+        <!-- Register as a Windows startup task so the tray auto-starts at login. -->
+        <desktop:Extension Category="windows.startupTask">
+          <desktop:StartupTask TaskId="iExtendTrayAutostart"
+                               Enabled="true"
+                               DisplayName="iExtend" />
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!--
+      runFullTrust is mandatory for pnputil driver installation.
+      See: https://docs.microsoft.com/en-us/windows/uwp/packaging/app-capability-declarations
+    -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+</Package>

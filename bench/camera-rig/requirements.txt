@@ -1,0 +1,22 @@
+# bench/camera-rig/requirements.txt
+# Python dependencies for measure_p2p_latency.py and the bench camera rig tools.
+#
+# Install with:
+#   pip install -r requirements.txt
+#
+# On Linux, also install the Tesseract OCR binary:
+#   sudo apt-get install tesseract-ocr
+#
+# On macOS:
+#   brew install tesseract
+#
+# On Windows:
+#   choco install tesseract
+#   # or download from https://github.com/UB-Mannheim/tesseract/wiki
+
+opencv-python==4.10.*
+numpy==1.26.*
+pytesseract==0.3.13
+click==8.1.*
+pandas==2.2.*
+pytest==8.2.*

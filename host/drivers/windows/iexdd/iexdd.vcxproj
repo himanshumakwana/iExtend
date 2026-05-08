@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  iexdd.vcxproj — MSBuild project for the iExtend Indirect Display Driver.
+
+  Build:
+    msbuild iexdd.vcxproj /p:Configuration=Debug /p:Platform=x64 \
+            /p:SignMode=TestSign /p:TestCertificate="iExtend Dev"
+
+  Requires:
+    - Visual Studio 2022 v143 toolset
+    - WDK 10.0.26100 (Windows 11 24H2) — must match SDK version
+    - KMDF 1.33 (ships with WDK 26100)
+    - IddCx 1.10 (ships with WDK 26100)
+
+  Output: $(OutDir)\iexdd.sys  + $(OutDir)\iexdd.cat
+-->
+<Project DefaultTargets="Build" ToolsVersion="15.0"
+         xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <!-- ============================================================
+       Globals
+       ============================================================ -->
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</ProjectGuid>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <!-- Kernel-mode driver: use the WDK Driver project type. -->
+    <Configuration Condition="'$(Configuration)'==''">Debug</Configuration>
+    <Platform Condition="'$(Platform)'==''">x64</Platform>
+    <WDKContentRoot Condition="'$(WDKContentRoot)'==''">$(MSBuildThisFileDirectory)..\..\..\..\..</WDKContentRoot>
+    <DriverType>KMDF</DriverType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+  </PropertyGroup>
+
+  <!-- Import the WDK props — sets IncludePath, LibraryPath, etc. -->
+  <Import Project="$(WDKContentRoot)\build\WindowsDriver.Default.props"
+          Condition="Exists('$(WDKContentRoot)\build\WindowsDriver.Default.props')" />
+
+  <!-- ============================================================
+       Configuration-specific properties
+       ============================================================ -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <TargetVersion>Windows10</TargetVersion>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>KMDF</DriverType>
+    <WppEnabled>true</WppEnabled>
+    <WppScanConfigurationData>Driver.c;Adapter.c;SwapChain.c;IoQueue.c;Edid.c</WppScanConfigurationData>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <TargetVersion>Windows10</TargetVersion>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>KMDF</DriverType>
+    <WppEnabled>true</WppEnabled>
+    <WppScanConfigurationData>Driver.c;Adapter.c;SwapChain.c;IoQueue.c;Edid.c</WppScanConfigurationData>
+  </PropertyGroup>
+
+  <!-- Import WDK targets. -->
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props"
+          Condition="Exists('$(VCTargetsPath)\Microsoft.Cpp.Default.props')" />
+
+  <!-- ============================================================
+       Compiler and linker settings
+       ============================================================ -->
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <!-- C17 with kernel-mode restrictions. -->
+      <LanguageStandard>stdc17</LanguageStandard>
+      <!-- Strict warnings — all warnings are errors. -->
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <!-- WDK-required defines. -->
+      <PreprocessorDefinitions>_KERNEL_MODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Disable: 4100 unreferenced formal parameter (WDFOBJECT callbacks use it). -->
+      <DisableSpecificWarnings>4100</DisableSpecificWarnings>
+      <!-- IddCx 1.10 API level. -->
+      <PreprocessorDefinitions>IDDCX_MINIMUM_VERSION_REQUIRED=0x000A0000;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- KMDF version. -->
+      <PreprocessorDefinitions>KMDF_VERSION_MINOR=33;KMDF_VERSION_MAJOR=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+
+    <Link>
+      <!-- IddCx import lib is added by the WDK targets automatically. -->
+      <AdditionalDependencies>IddCx.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <!-- No default libs — kernel drivers are standalone. -->
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+    </Link>
+
+    <Inf>
+      <!-- stampinf fills in DriverVer= during build. -->
+      <SpecifyArchitecture>true</SpecifyArchitecture>
+      <SpecifyDriverVerDirectiveDate>true</SpecifyDriverVerDirectiveDate>
+    </Inf>
+  </ItemDefinitionGroup>
+
+  <!-- ============================================================
+       Source files
+       ============================================================ -->
+  <ItemGroup>
+    <ClCompile Include="Driver.c" />
+    <ClCompile Include="Adapter.c" />
+    <ClCompile Include="SwapChain.c" />
+    <ClCompile Include="IoQueue.c" />
+    <ClCompile Include="Edid.c" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClInclude Include="Driver.h" />
+    <ClInclude Include="Adapter.h" />
+    <ClInclude Include="SwapChain.h" />
+    <ClInclude Include="IoQueue.h" />
+    <ClInclude Include="Edid.h" />
+    <ClInclude Include="Public.h" />
+    <ClInclude Include="Trace.h" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Inf Include="iexdd.inf" />
+  </ItemGroup>
+
+  <!-- Import WDK driver build targets. -->
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets"
+          Condition="Exists('$(VCTargetsPath)\Microsoft.Cpp.targets')" />
+  <Import Project="$(WDKContentRoot)\build\WindowsDriver.Common.targets"
+          Condition="Exists('$(WDKContentRoot)\build\WindowsDriver.Common.targets')" />
+
+</Project>

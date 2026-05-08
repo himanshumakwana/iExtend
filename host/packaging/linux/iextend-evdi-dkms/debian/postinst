@@ -1,0 +1,4 @@
+#!/bin/sh
+# Symlink to the shared postinst in evdi-dkms/.
+# This file is installed as the package maintainer script by debhelper.
+exec /usr/share/iextend-evdi-dkms/postinst "$@"

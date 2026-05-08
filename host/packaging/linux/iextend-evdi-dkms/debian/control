@@ -1,0 +1,31 @@
+Source: iextend-evdi-dkms
+Section: kernel
+Priority: optional
+Maintainer: iExtend Contributors <dev@iextend.app>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/REPLACE_WITH_OWNER/iExtend
+Rules-Requires-Root: no
+
+Package: iextend-evdi-dkms
+Architecture: all
+Depends:
+  dkms,
+  make,
+  gcc,
+  linux-headers-generic | linux-headers-amd64 | linux-headers,
+  ${misc:Depends}
+Recommends:
+  mokutil,
+  sbsigntool
+Description: iExtend virtual display driver (evdi DKMS module)
+ Provides the evdi kernel module (maintained by DisplayLink, GPL-2.0)
+ as a DKMS source package.  After installation, DKMS builds and installs
+ the module for the currently running kernel and any future kernel upgrades.
+ .
+ On SecureBoot systems the postinst script generates a machine-unique
+ signing certificate and prints a mokutil command to enroll it.
+ .
+ This package is intentionally separate from the Apache-2.0 iextend
+ daemon: iextend loads libevdi at runtime via dlopen, keeping its own
+ license unaffected by evdi's GPL.

@@ -1,0 +1,38 @@
+[package]
+name = "screen-timecode"
+version = "0.1.0"
+edition = "2021"
+description = "Paints a decimal-seconds timecode on the screen edge, synced to vsync. Used by the bench camera rig to measure photon-to-photon latency."
+publish = false
+
+# This crate is intentionally NOT a member of the host/ workspace because it
+# depends on platform display APIs (DXGI, DRM) that would pull unwanted
+# transitive dependencies into the iextendd build matrix. Build it standalone:
+#   cargo build --release
+# from this directory.
+
+[dependencies]
+anyhow  = "1.0"
+clap    = { version = "4.5", features = ["derive"] }
+# softbuffer provides a cross-platform CPU-rasterised framebuffer that lets us
+# paint pixels directly, without pulling in a full GPU pipeline.
+softbuffer = "0.4"
+winit   = "0.30"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+drm = "0.12"
+nix = { version = "0.29", features = ["fs", "ioctl"] }
+
+[profile.release]
+# Fast startup matters — we want the timecode painting to begin as early as
+# possible so the camera rig operator doesn't have to wait.
+opt-level = 3
+lto = "thin"
+strip = "symbols"

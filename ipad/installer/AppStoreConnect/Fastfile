@@ -1,0 +1,138 @@
+# ipad/installer/AppStoreConnect/Fastfile
+#
+# fastlane lanes for iExtend iPad app distribution.
+#
+# Lanes:
+#   build   — compile Release IPA, fetch certs via `match`
+#   beta    — build + push to TestFlight
+#   release — build + submit to App Store Connect for review
+#
+# Required environment variables (set in CI secrets or .env.local):
+#   APPLE_ID                      — your Apple ID email
+#   APPLE_TEAM_ID                 — 10-character Team ID (e.g. ABCDE12345)
+#   APPLE_ITC_TEAM_ID             — App Store Connect team ID (numeric)
+#   FASTLANE_APP_SPECIFIC_PASSWORD — generated at appleid.apple.com
+#   MATCH_PASSWORD                — passphrase for the match certificate repo
+#   MATCH_GIT_URL                 — URL of the private match certificate repo
+#
+# Do NOT commit .env.local; it is in .gitignore.
+
+default_platform(:ios)
+
+platform :ios do
+  # -------------------------------------------------------------------------
+  # build — compile Release IPA
+  # -------------------------------------------------------------------------
+  desc "Fetch certs with match and build a Release IPA"
+  lane :build do
+    # In CI (GitHub Actions), setup_ci initialises a fresh keychain so that
+    # match-imported certificates don't collide with a nonexistent login keychain.
+    setup_ci if ENV["CI"]
+
+    # Sync certificates and provisioning profiles from the match cert repo.
+    # readonly: true — never create new certs in CI; fail loudly if missing.
+    match(
+      type: "appstore",
+      readonly: is_ci,
+      app_identifier: "com.iextend.iExtend"
+    )
+
+    # Bump build number from git tag (strips 'v' prefix + qualifiers).
+    tag = ENV.fetch("GITHUB_REF_NAME", "v0.1.0").sub(/^v/, "").split("-").first
+    parts = tag.split(".")
+    build_number = (parts[0].to_i * 10_000 +
+                    parts[1].to_i * 100 +
+                    parts[2].to_i).to_s
+
+    increment_build_number(
+      build_number: build_number,
+      xcodeproj: "../../iExtend.xcodeproj"
+    )
+
+    build_app(
+      workspace:        "../../iExtend.xcworkspace",
+      scheme:           "iExtend",
+      configuration:    "Release",
+      export_method:    "app-store",
+      export_options: {
+        provisioningProfiles: {
+          "com.iextend.iExtend" => "match AppStore com.iextend.iExtend"
+        }
+      },
+      output_directory: "./build",
+      output_name:      "iExtend.ipa"
+    )
+  end
+
+  # -------------------------------------------------------------------------
+  # beta — push to TestFlight
+  # -------------------------------------------------------------------------
+  desc "Build and push to TestFlight for internal/external testing"
+  lane :beta do
+    build
+
+    upload_to_testflight(
+      ipa:                             "./build/iExtend.ipa",
+      skip_waiting_for_build_processing: true,
+      changelog:                       File.read("metadata/release_notes.txt"),
+      distribute_external:             false  # internal testers only; promote manually
+    )
+
+    slack_or_log("TestFlight build uploaded. Check App Store Connect > TestFlight.")
+  end
+
+  # -------------------------------------------------------------------------
+  # release — submit to App Store for review
+  # -------------------------------------------------------------------------
+  desc "Build and submit to App Store Connect for App Review"
+  lane :release do
+    build
+
+    upload_to_app_store(
+      ipa:                  "./build/iExtend.ipa",
+      metadata_path:        "./metadata",
+      screenshots_path:     "./screenshots",
+      submit_for_review:    true,
+      automatic_release:    false,  # require manual release after approval
+      precheck_include_in_app_purchases: false,
+      submission_information: {
+        # Encryption export compliance — iExtend uses standard TLS/DTLS only
+        add_id_info_uses_idfa:               false,
+        export_compliance_uses_encryption:   true,
+        export_compliance_encryption_updated: false,
+        export_compliance_is_exempt:         true   # standard-encryption exemption
+      }
+    )
+
+    slack_or_log("App Store submission complete. Waiting for Apple review (24-48h).")
+  end
+
+  # -------------------------------------------------------------------------
+  # screenshot — run snapshot to capture App Store screenshots
+  # -------------------------------------------------------------------------
+  desc "Capture App Store screenshots via snapshot on connected iPad simulators"
+  lane :screenshots do
+    capture_screenshots(
+      workspace:   "../../iExtend.xcworkspace",
+      scheme:      "iExtendUITests",
+      output_directory: "./screenshots",
+      devices: [
+        "iPad Pro 13-inch (M4)",
+        "iPad Pro 11-inch (M4)",
+        "iPad Air 13-inch (M2)"
+      ]
+    )
+    frame_screenshots(white: true)
+  end
+
+  # -------------------------------------------------------------------------
+  # Private helpers
+  # -------------------------------------------------------------------------
+  private_lane :slack_or_log do |message|
+    if ENV["SLACK_WEBHOOK_URL"]
+      slack(message: message, success: true)
+    else
+      UI.success message
+    end
+  end
+end

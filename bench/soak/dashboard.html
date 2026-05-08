@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iExtend soak — dashboard</title>
+  <style>
+    /* ── reset + base ───────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --border:   #2c2f3e;
+      --text:     #e2e4ec;
+      --muted:    #8b90a8;
+      --accent:   #5b8dee;
+      --green:    #3ecf8e;
+      --yellow:   #f6c026;
+      --red:      #ff5f5f;
+      --radius:   10px;
+      --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* ── layout ─────────────────────────────────────────────────────── */
+    .wrapper  { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+    header    { margin-bottom: 28px; }
+    h1        { font-size: 1.5rem; font-weight: 700; color: var(--text); }
+    h2        { font-size: 1.05rem; font-weight: 600; color: var(--muted);
+                text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+    section   { background: var(--surface); border: 1px solid var(--border);
+                border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px; }
+
+    /* ── meta row ────────────────────────────────────────────────────── */
+    #meta     { color: var(--muted); font-size: .875rem; margin-top: 6px; }
+    #meta span{ font-family: var(--font-mono); color: var(--text); }
+
+    /* ── stat cards ──────────────────────────────────────────────────── */
+    .cards    { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
+    .card     { flex: 1 1 160px; background: var(--surface); border: 1px solid var(--border);
+                border-radius: var(--radius); padding: 14px 18px; }
+    .card-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em;
+                  color: var(--muted); margin-bottom: 4px; }
+    .card-value { font-size: 1.6rem; font-family: var(--font-mono); font-weight: 700; }
+    .card-unit  { font-size: .8rem; color: var(--muted); margin-left: 3px; }
+    .green  { color: var(--green); }
+    .yellow { color: var(--yellow); }
+    .red    { color: var(--red); }
+
+    /* ── chart containers ────────────────────────────────────────────── */
+    .chart-wrap { position: relative; height: 240px; }
+
+    /* ── status bar ─────────────────────────────────────────────────── */
+    #status   { font-size: .8rem; color: var(--muted); text-align: center; margin-top: 24px; }
+
+    /* ── error state ─────────────────────────────────────────────────── */
+    #error    { display: none; background: #2a1010; border: 1px solid var(--red);
+                border-radius: var(--radius); padding: 16px 20px; color: var(--red);
+                margin-bottom: 20px; font-family: var(--font-mono); font-size: .85rem; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <header>
+    <h1>iExtend 8-hour soak</h1>
+    <p id="meta">Loading <span id="filename">samples.jsonl</span> …</p>
+  </header>
+
+  <div id="error"></div>
+
+  <!-- stat cards -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">Samples</div>
+      <div class="card-value" id="c-samples">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">p50 (last)</div>
+      <div class="card-value" id="c-p50">—<span class="card-unit">ms</span></div>
+    </div>
+    <div class="card">
+      <div class="card-label">p99 (last)</div>
+      <div class="card-value" id="c-p99">—<span class="card-unit">ms</span></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Drops</div>
+      <div class="card-value" id="c-drops">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Reconnects</div>
+      <div class="card-value" id="c-reconnects">—</div>
+    </div>
+  </div>
+
+  <!-- charts -->
+  <section>
+    <h2>Latency (ms)</h2>
+    <div class="chart-wrap"><canvas id="chart-lat"></canvas></div>
+  </section>
+
+  <section>
+    <h2>Encoder bitrate (Mbps)</h2>
+    <div class="chart-wrap"><canvas id="chart-br"></canvas></div>
+  </section>
+
+  <section>
+    <h2>Drops + reconnects (cumulative)</h2>
+    <div class="chart-wrap"><canvas id="chart-ev"></canvas></div>
+  </section>
+
+  <section>
+    <h2>RSS memory (MB)</h2>
+    <div class="chart-wrap"><canvas id="chart-rss"></canvas></div>
+  </section>
+
+  <p id="status"></p>
+</div>
+
+<!--
+  Chart.js is loaded from a relative path `chart.umd.min.js`.
+  The run-soak.sh script copies dashboard/ (including this file and the
+  chart.umd.min.js) into the OUT_DIR, so they are always co-located.
+
+  If chart.umd.min.js is missing (e.g. you opened this file directly from the
+  repo), the charts won't render but the stat cards will still work.
+-->
+<script src="chart.umd.min.js"></script>
+
+<script type="module">
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+const $ = (id) => document.getElementById(id);
+
+function showError(msg) {
+  const el = $('error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function usToMs(us) { return (us / 1000).toFixed(2); }
+function bpsToMbps(bps) { return (bps / 1_000_000).toFixed(2); }
+function bytesToMb(b) { return (b / 1_048_576).toFixed(1); }
+
+function colourForP99(ms) {
+  if (ms <= 18) return getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
+  if (ms <= 30) return getComputedStyle(document.documentElement).getPropertyValue('--yellow').trim();
+  return getComputedStyle(document.documentElement).getPropertyValue('--red').trim();
+}
+
+// ── Load and parse samples.jsonl ─────────────────────────────────────────
+
+let samples = [];
+try {
+  const resp = await fetch('samples.jsonl');
+  if (!resp.ok) throw new Error(`HTTP ${resp.status} — ${resp.statusText}`);
+  const text = await resp.text();
+  samples = text
+    .trim()
+    .split('\n')
+    .flatMap((line) => {
+      try { return [JSON.parse(line)]; }
+      catch { return []; }
+    });
+} catch (err) {
+  showError(`Could not load samples.jsonl: ${err.message}\n\n` +
+    'Make sure you are serving this file from an HTTP server (not file://) ' +
+    'and that samples.jsonl is in the same directory.\n\n' +
+    'Quick start:\n  python3 -m http.server 8090 --directory OUT_DIR\n' +
+    '  open http://127.0.0.1:8090/dashboard.html');
+  $('meta').textContent = 'Failed to load data — see error above.';
+}
+
+if (samples.length === 0) {
+  $('meta').textContent = 'No samples loaded.';
+  $('status').textContent = 'samples.jsonl is empty or could not be parsed.';
+} else {
+  const t0 = new Date(samples[0].t * 1000);
+  const t1 = new Date(samples[samples.length - 1].t * 1000);
+  const dur = ((t1 - t0) / 3_600_000).toFixed(2);
+  const isMock = samples.some(s => s._mock);
+
+  $('meta').innerHTML =
+    `<span>${samples.length}</span> samples ·
+     <span>${t0.toISOString()}</span> →
+     <span>${t1.toISOString()}</span> ·
+     <span>${dur} h</span>` +
+    (isMock ? ' · <span style="color:var(--yellow)">mock data</span>' : '');
+
+  // ── Stat cards ────────────────────────────────────────────────────────
+
+  const last = samples[samples.length - 1];
+  $('c-samples').textContent = samples.length;
+
+  const p50ms = last.latency_p50_us ? (+usToMs(last.latency_p50_us)) : null;
+  const p99ms = last.latency_p99_us ? (+usToMs(last.latency_p99_us)) : null;
+
+  $('c-p50').innerHTML = p50ms != null
+    ? `<span class="${p50ms <= 14 ? 'green' : p50ms <= 30 ? 'yellow' : 'red'}">${p50ms.toFixed(1)}</span><span class="card-unit">ms</span>`
+    : '—';
+  $('c-p99').innerHTML = p99ms != null
+    ? `<span class="${p99ms <= 30 ? 'green' : 'red'}">${p99ms.toFixed(1)}</span><span class="card-unit">ms</span>`
+    : '—';
+  $('c-drops').textContent = last.drops_total ?? '—';
+  $('c-reconnects').textContent = last.reconnects_total ?? '—';
+
+  // ── Shared chart config ───────────────────────────────────────────────
+
+  const CHART_DEFAULTS = {
+    type: 'line',
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8b90a8', boxWidth: 12 } },
+        tooltip: { backgroundColor: '#1a1d27', titleColor: '#e2e4ec', bodyColor: '#8b90a8' },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#8b90a8', maxTicksLimit: 10, maxRotation: 0 },
+          grid:  { color: '#2c2f3e' },
+        },
+        y: {
+          ticks: { color: '#8b90a8' },
+          grid:  { color: '#2c2f3e' },
+        },
+      },
+    },
+  };
+
+  // Decimate to at most 1800 points to keep the DOM responsive.
+  const MAX_PTS = 1800;
+  const stride = Math.max(1, Math.floor(samples.length / MAX_PTS));
+  const decimated = samples.filter((_, i) => i % stride === 0);
+
+  const labels = decimated.map(s =>
+    new Date(s.t * 1000).toISOString().slice(11, 19)  // HH:MM:SS
+  );
+
+  const line = (color, dashes = []) => ({
+    borderColor: color,
+    backgroundColor: color + '1a',
+    borderWidth: 1.5,
+    pointRadius: 0,
+    borderDash: dashes,
+    tension: 0.2,
+    fill: false,
+  });
+
+  // ── Latency chart ─────────────────────────────────────────────────────
+  new Chart($('chart-lat'), {
+    ...CHART_DEFAULTS,
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'p50',
+          data: decimated.map(s => s.latency_p50_us ? usToMs(s.latency_p50_us) : null),
+          ...line('#3ecf8e'),
+        },
+        {
+          label: 'p95',
+          data: decimated.map(s => s.latency_p95_us ? usToMs(s.latency_p95_us) : null),
+          ...line('#f6c026'),
+        },
+        {
+          label: 'p99',
+          data: decimated.map(s => s.latency_p99_us ? usToMs(s.latency_p99_us) : null),
+          ...line('#ff5f5f'),
+        },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS.options,
+      scales: {
+        ...CHART_DEFAULTS.options.scales,
+        y: {
+          ...CHART_DEFAULTS.options.scales.y,
+          title: { display: true, text: 'ms', color: '#8b90a8' },
+          // Draw budget lines at 14 ms (p50 target) and 30 ms (p99 target)
+        },
+      },
+      plugins: {
+        ...CHART_DEFAULTS.options.plugins,
+        annotation: undefined, // chart.js annotation plugin not loaded; skipped
+      },
+    },
+  });
+
+  // ── Bitrate chart ─────────────────────────────────────────────────────
+  new Chart($('chart-br'), {
+    ...CHART_DEFAULTS,
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Encoder bitrate',
+          data: decimated.map(s => s.enc_bitrate_bps ? bpsToMbps(s.enc_bitrate_bps) : null),
+          ...line('#5b8dee'),
+          fill: true,
+        },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS.options,
+      scales: {
+        ...CHART_DEFAULTS.options.scales,
+        y: { ...CHART_DEFAULTS.options.scales.y, title: { display: true, text: 'Mbps', color: '#8b90a8' } },
+      },
+    },
+  });
+
+  // ── Drops + reconnects ────────────────────────────────────────────────
+  new Chart($('chart-ev'), {
+    ...CHART_DEFAULTS,
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Drops (cumulative)',
+          data: decimated.map(s => s.drops_total ?? null),
+          ...line('#f6c026'),
+        },
+        {
+          label: 'Reconnects (cumulative)',
+          data: decimated.map(s => s.reconnects_total ?? null),
+          ...line('#ff5f5f', [4, 3]),
+        },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS.options,
+      scales: {
+        ...CHART_DEFAULTS.options.scales,
+        y: { ...CHART_DEFAULTS.options.scales.y, title: { display: true, text: 'count', color: '#8b90a8' }, min: 0 },
+      },
+    },
+  });
+
+  // ── RSS memory ────────────────────────────────────────────────────────
+  new Chart($('chart-rss'), {
+    ...CHART_DEFAULTS,
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'RSS',
+          data: decimated.map(s => s.rss_bytes ? bytesToMb(s.rss_bytes) : null),
+          ...line('#a78bfa'),
+          fill: true,
+        },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS.options,
+      scales: {
+        ...CHART_DEFAULTS.options.scales,
+        y: { ...CHART_DEFAULTS.options.scales.y, title: { display: true, text: 'MB', color: '#8b90a8' } },
+      },
+    },
+  });
+
+  $('status').textContent =
+    `Loaded ${samples.length} samples · stride=${stride} · rendered ${decimated.length} points.` +
+    (isMock ? '  This data was generated by the mock fallback in run-soak.sh.' : '');
+}
+</script>
+</body>
+</html>

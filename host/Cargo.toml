@@ -12,6 +12,12 @@ members = [
     "crates/ix-display-windows",
     "crates/ix-display-linux",
     "crates/ix-input",
+    # Bench camera-rig timecode tool (not part of the shipping product).
+    # Depends on platform display APIs (DXGI, DRM) — built only when needed.
+    # Canonical source: bench/camera-rig/screen-timecode/ (mirrored here for workspace).
+    "bench/screen-timecode",
+    # xtask: cargo subcommand for Windows driver build / sign / install / trace.
+    "xtask",
 ]
 
 [workspace.package]
