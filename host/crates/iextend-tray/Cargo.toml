@@ -13,6 +13,8 @@ tracing-subscriber = { workspace = true }
 anyhow             = { workspace = true }
 tonic              = { workspace = true }
 prost              = { workspace = true }
+tower              = { workspace = true }
+hyper-util         = { version = "0.1", features = ["tokio"] }
 ix-transport       = { path = "../ix-transport" }
 
 [build-dependencies]

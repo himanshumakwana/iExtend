@@ -11,6 +11,7 @@ tracing-subscriber = { workspace = true }
 anyhow             = { workspace = true }
 tonic              = { workspace = true }
 prost              = { workspace = true }
+tokio-stream       = "0.1"
 ix-transport       = { path = "../ix-transport" }
 ix-codec           = { path = "../ix-codec" }
 ix-rtc             = { path = "../ix-rtc" }
@@ -22,6 +23,12 @@ ix-display-windows = { path = "../ix-display-windows" }
 
 [target.'cfg(unix)'.dependencies]
 ix-display-linux   = { path = "../ix-display-linux" }
+
+[dev-dependencies]
+tempfile   = "3"
+hyper-util = { version = "0.1", features = ["tokio"] }
+tower      = { workspace = true }
+tokio      = { workspace = true, features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }
 
 [build-dependencies]
 tonic-build         = { workspace = true }

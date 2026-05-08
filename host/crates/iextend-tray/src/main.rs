@@ -1,4 +1,5 @@
 mod app;
+mod client;
 
 fn main() -> eframe::Result<()> {
     init_logging();

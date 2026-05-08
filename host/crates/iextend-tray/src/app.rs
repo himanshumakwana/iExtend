@@ -15,8 +15,13 @@ impl eframe::App for TrayApp {
             let endpoint = LocalEndpoint::default_for_user();
             ui.label(format!("Endpoint: {}", endpoint.0));
 
-            if ui.button("Ping iextendd (placeholder)").clicked() {
-                self.daemon_status = Some("Plan 6 wires this up.".into());
+            if ui.button("Ping iextendd").clicked() {
+                let endpoint = LocalEndpoint::default_for_user();
+                let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+                self.daemon_status = Some(match rt.block_on(crate::client::fetch_status(&endpoint)) {
+                    Ok(s)  => s,
+                    Err(e) => format!("error: {e}"),
+                });
             }
             if let Some(s) = &self.daemon_status { ui.label(s); }
         });
