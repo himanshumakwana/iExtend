@@ -24,14 +24,19 @@ test.describe('iExtend.html', () => {
     await page.waitForSelector('[data-dc-section]');
     const world = page.locator('.design-canvas > div').first();
     const before = await world.evaluate((el) => (el as HTMLElement).style.transform);
-    // drag from a known empty canvas spot (bottom-left, away from any artboard)
+    // (40, 850) is below the artboard row at the 1440x900 viewport — empty canvas
+    // background. The DCViewport pan handler triggers on primary-button drag started
+    // outside any [data-dc-slot]. Drag right by 100px → world should translate by ~100px.
     await page.mouse.move(40, 850);
     await page.mouse.down();
     await page.mouse.move(140, 850, { steps: 5 });
     await page.mouse.up();
     const after = await world.evaluate((el) => (el as HTMLElement).style.transform);
     expect(after).not.toBe(before);
-    expect(after).toMatch(/translate3d/);
+    const xBefore = Number(before.match(/translate3d\((-?[\d.]+)px/)?.[1] ?? '0');
+    const xAfter  = Number(after .match(/translate3d\((-?[\d.]+)px/)?.[1] ?? '0');
+    expect(xAfter - xBefore).toBeGreaterThan(95);
+    expect(xAfter - xBefore).toBeLessThan(105);
   });
 
   test('canvas zooms on ctrl+wheel', async ({ page }) => {
@@ -39,14 +44,20 @@ test.describe('iExtend.html', () => {
     await page.waitForSelector('[data-dc-section]');
     const world = page.locator('.design-canvas > div').first();
     const before = await world.evaluate((el) => (el as HTMLElement).style.transform);
+    // (720, 450) is the viewport center; ctrl+wheel zooms toward the cursor.
+    // Notched-mouse-wheel branch in DCViewport applies a fixed exp(0.18) ≈ 1.197x step.
     await page.mouse.move(720, 450);
     await page.keyboard.down('Control');
     await page.mouse.wheel(0, -120);
     await page.keyboard.up('Control');
+    // Allow the synchronous transform write + style-recalc to land before reading.
     await page.waitForTimeout(150);
     const after = await world.evaluate((el) => (el as HTMLElement).style.transform);
     expect(after).not.toBe(before);
-    expect(after).toMatch(/scale\(/);
+    const sBefore = Number(before.match(/scale\(([\d.]+)\)/)?.[1] ?? '1');
+    const sAfter  = Number(after .match(/scale\(([\d.]+)\)/)?.[1] ?? '1');
+    expect(sAfter / sBefore).toBeGreaterThan(1.15);
+    expect(sAfter / sBefore).toBeLessThan(1.25);
   });
 
   test('artboard labels are visible', async ({ page }) => {
