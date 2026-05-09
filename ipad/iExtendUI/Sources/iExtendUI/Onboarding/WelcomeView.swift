@@ -3,6 +3,7 @@
 // Layout: two-column grid. Left: copy + CTAs + feature strip.
 // Right: mode-picker card (Extend / Mirror / Drawing tablet).
 
+#if canImport(UIKit)
 import SwiftUI
 import iExtendKit
 
@@ -270,3 +271,4 @@ extension LabelStyle where Self == IconFirstLabelStyle {
         .preferredColorScheme(.dark)
         .applyTheme(Theme(dark: true))
 }
+#endif
