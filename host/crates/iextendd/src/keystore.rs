@@ -23,7 +23,6 @@
 use anyhow::Context;
 use anyhow::{anyhow, Result};
 use ed25519_dalek::{SigningKey, VerifyingKey};
-#[cfg(unix)]
 use rand_core::OsRng;
 use std::path::{Path, PathBuf};
 
@@ -111,10 +110,29 @@ pub async fn load_or_create_root_key() -> Result<HostRootKey> {
 
 #[cfg(windows)]
 pub async fn load_or_create_root_key() -> Result<HostRootKey> {
-    // Sketch only — Plan 9 wires this to DPAPI via the windows crate.
-    // The shape: encrypt the 32 raw bytes with CryptProtectData under
-    // CRYPTPROTECT_LOCAL_MACHINE = 0, then write to %APPDATA%\iExtend\root.dat.
-    todo!("Windows DPAPI root-key wrap — Plan 9");
+    // Plan 9 will wrap this with DPAPI's CryptProtectData under
+    // CRYPTPROTECT_LOCAL_MACHINE so the on-disk bytes are encrypted at rest.
+    // Until then, mirror the Linux "no keyring" fallback: store the raw 32
+    // bytes at %APPDATA%\iExtend\root.key. The tracing warning at startup
+    // makes the situation visible.
+    let path = data_dir().join("root.key");
+    if let Ok(bytes) = std::fs::read(&path) {
+        let bytes: [u8; 32] = bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| anyhow!("root.key wrong size"))?;
+        return Ok(HostRootKey {
+            signing: SigningKey::from_bytes(&bytes),
+        });
+    }
+    let signing = SigningKey::generate(&mut OsRng);
+    std::fs::create_dir_all(path.parent().unwrap())?;
+    std::fs::write(&path, signing.to_bytes())?;
+    tracing::warn!(
+        path = %path.display(),
+        "root key written in plaintext at %APPDATA% — Plan 9 will swap in DPAPI"
+    );
+    Ok(HostRootKey { signing })
 }
 
 /// Pinned-pubkey store: sqlite-backed list of paired iPads.
