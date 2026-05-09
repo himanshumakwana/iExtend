@@ -11,7 +11,14 @@
 //! counterparts in `Public.h`. Any change here **must** bump
 //! `IEXDD_PROTOCOL_VERSION` in both this file and `Public.h`.
 
-#![allow(non_camel_case_types, dead_code)]
+// FFI mirrors of Win32 / WDK structs — keep the field names matching the C
+// headers so the bindings round-trip cleanly with bindgen-regenerated output.
+#![allow(
+    non_camel_case_types,
+    non_snake_case,
+    dead_code,
+    clippy::upper_case_acronyms
+)]
 
 use std::ffi::c_void;
 

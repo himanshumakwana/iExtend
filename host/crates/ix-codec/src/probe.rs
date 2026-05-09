@@ -77,6 +77,10 @@ impl Probe {
     ///
     /// This is cheap (~2 ms): it only stats shared-library paths and
     /// `/dev/dri/renderD*` nodes; it does not open an encode session.
+    // Each push is feature-gated; clippy's `vec_init_then_push` doesn't
+    // distinguish that case from a static `vec![…]`-initialisable list,
+    // so allow it here at the function level.
+    #[allow(clippy::vec_init_then_push)]
     pub fn detect() -> ProbeOutcome {
         let mut available: Vec<EncoderKind> = Vec::new();
 

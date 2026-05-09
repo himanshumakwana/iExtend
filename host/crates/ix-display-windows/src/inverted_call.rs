@@ -14,7 +14,6 @@
 
 use std::ffi::c_void;
 use std::mem;
-use std::os::windows::io::RawHandle;
 
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::Storage::FileSystem::{

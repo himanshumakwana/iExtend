@@ -12,7 +12,8 @@
 //! - Periodic IDR every `intra_refresh_period` frames (openh264 does not
 //!   support true rolling intra-refresh; a periodic IDR approximates it).
 
-#![cfg(feature = "sw-only")]
+// `#[cfg(feature = "sw-only")]` already gates this module in lib.rs;
+// don't repeat it as an inner attribute here (clippy::duplicated_attributes).
 
 use crate::common::SharedConfig;
 use crate::{
@@ -84,7 +85,7 @@ impl X264Sw {
             return true;
         }
         let period = self.cfg.intra_refresh_period();
-        period > 0 && self.frame_count % period == 0
+        period > 0 && self.frame_count.is_multiple_of(period)
     }
 
     /// Build a YUV420p buffer suitable for openh264.

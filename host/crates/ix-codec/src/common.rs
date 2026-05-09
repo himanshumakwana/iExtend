@@ -70,14 +70,14 @@ impl SharedConfig {
     /// `intra_refresh_rows` macroblock-rows per frame, so the cycle length is
     /// `ceil(height / (intra_refresh_rows * 16))` frames.
     pub fn intra_refresh_period(&self) -> u32 {
-        let mb_rows = (self.height + 15) / 16;
-        (mb_rows + self.intra_refresh_rows - 1) / self.intra_refresh_rows
+        let mb_rows = self.height.div_ceil(16);
+        mb_rows.div_ceil(self.intra_refresh_rows)
     }
 
     /// AMF measures intra-refresh in macroblocks-per-slot. Conversion:
     /// `mbs_per_slot = ceil(width/16) * intra_refresh_rows`.
     pub fn amf_mbs_per_slot(&self) -> u32 {
-        let mb_cols = (self.width + 15) / 16;
+        let mb_cols = self.width.div_ceil(16);
         mb_cols * self.intra_refresh_rows
     }
 }

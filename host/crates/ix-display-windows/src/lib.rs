@@ -22,6 +22,14 @@
 //! pixel-data copy.
 
 #![cfg(windows)]
+// Scaffolding-stage allows. Promote to deny when the IddCx pipeline ships
+// end-to-end and every public surface is wired up.
+#![allow(
+    dead_code,
+    unused_imports,
+    clippy::arc_with_non_send_sync,
+    clippy::type_complexity
+)]
 
 mod error;
 mod frame_pump;
@@ -35,7 +43,7 @@ use ix_display::{
     DisplayError, DisplayMode, DisplaySource, GpuFrame as SharedGpuFrame, GpuFrameKind,
     MonitorHandle,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 // ---------------------------------------------------------------------------
 // WindowsDisplaySource — public entry point
