@@ -118,63 +118,86 @@ public struct WelcomeView: View {
                 .foregroundStyle(t.ink2)
 
             ForEach(modeItems.indices, id: \.self) { i in
-                let mode = modeItems[i]
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(hex: mode.tint))
-                        Image(systemName: mode.sysIcon)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(mode.iconColor)
-                    }
-                    .frame(width: 44, height: 44)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(mode.title)
-                            .font(.body(15, weight: .semibold))
-                            .foregroundStyle(t.ink)
-                        Text(mode.subtitle)
-                            .font(.body(12))
-                            .foregroundStyle(t.ink2)
-                    }
-                    Spacer()
-
-                    if i == 0 {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(t.accent)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(i == 0
-                              ? Color(hex: mode.tint).opacity(0.8)
-                              : (cs == .dark ? Color.white.opacity(0.04) : Color.black.opacity(0.03)))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .strokeBorder(i == 0 ? t.accent : t.sep,
-                                              lineWidth: i == 0 ? 1.5 : 1)
-                        )
-                )
+                modeRow(at: i)
             }
         }
         .padding(22)
+        .background(modePickerCardBackground)
+        .frame(width: 270)
+    }
+
+    /// Single mode-picker row. Extracted out of `modePickerCard` to keep the
+    /// SwiftUI type-checker from dying on the ternary-laden background
+    /// expression — Swift hits "unable to type-check this expression in
+    /// reasonable time" on the original inline form.
+    @ViewBuilder
+    private func modeRow(at i: Int) -> some View {
+        let mode = modeItems[i]
+        let isSelected = i == 0
+        let rowFillSelected = Color(hex: mode.tint).opacity(0.8)
+        let rowFillUnselected: Color = (cs == .dark
+            ? Color.white.opacity(0.04)
+            : Color.black.opacity(0.03))
+        let rowFill: Color = isSelected ? rowFillSelected : rowFillUnselected
+        let strokeColor: Color = isSelected ? t.accent : t.sep
+        let strokeWidth: CGFloat = isSelected ? 1.5 : 1
+
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(hex: mode.tint))
+                Image(systemName: mode.sysIcon)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(mode.iconColor)
+            }
+            .frame(width: 44, height: 44)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(mode.title)
+                    .font(.body(15, weight: .semibold))
+                    .foregroundStyle(t.ink)
+                Text(mode.subtitle)
+                    .font(.body(12))
+                    .foregroundStyle(t.ink2)
+            }
+            Spacer()
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(t.accent)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
         .background(
-            RoundedRectangle(cornerRadius: 28)
-                .fill(cs == .dark
-                      ? Color(hex: "#1c1c1e").opacity(0.7)
-                      : Color.white.opacity(0.65))
-                .shadow(color: .black.opacity(cs == .dark ? 0.5 : 0.12), radius: 30, y: 10)
+            RoundedRectangle(cornerRadius: 16)
+                .fill(rowFill)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 28)
-                        .strokeBorder(cs == .dark
-                                      ? Color.white.opacity(0.1)
-                                      : Color.black.opacity(0.05), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(strokeColor, lineWidth: strokeWidth)
                 )
         )
-        .frame(width: 270)
+    }
+
+    /// Card background extracted for the same type-check-time reason.
+    @ViewBuilder
+    private var modePickerCardBackground: some View {
+        let cardFill: Color = cs == .dark
+            ? Color(hex: "#1c1c1e").opacity(0.7)
+            : Color.white.opacity(0.65)
+        let shadowOpacity: Double = cs == .dark ? 0.5 : 0.12
+        let strokeColor: Color = cs == .dark
+            ? Color.white.opacity(0.1)
+            : Color.black.opacity(0.05)
+
+        RoundedRectangle(cornerRadius: 28)
+            .fill(cardFill)
+            .shadow(color: .black.opacity(shadowOpacity), radius: 30, y: 10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 28)
+                    .strokeBorder(strokeColor, lineWidth: 1)
+            )
     }
 
     // MARK: Data

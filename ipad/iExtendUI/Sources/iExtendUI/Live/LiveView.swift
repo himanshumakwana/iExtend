@@ -117,7 +117,12 @@ public final class MetalLayerHostController: UIViewController {
         self.renderer = renderer
 
         renderer.layer.frame = view.bounds
+        // CALayer.autoresizingMask is macOS-only. On iOS we resize the
+        // sublayer manually in viewDidLayoutSubviews(); keep that path
+        // for cross-platform consistency.
+        #if os(macOS)
         renderer.layer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        #endif
         view.layer.addSublayer(renderer.layer)
 
         renderer.start()
