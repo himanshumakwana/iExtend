@@ -135,7 +135,11 @@ public final class EventCapture {
             // Convert UIKit altitude (0 = horizontal, π/2 = vertical) to
             // the wire tilt convention (0 = vertical, π/2 = horizontal):
             //   wire_tilt = π/2 − altitude
-            let wireTilt = Float(Float.pi / 2 - pen.altitudeAngle)
+            // pen.altitudeAngle is CGFloat; convert to Float first to keep
+            // the arithmetic single-typed (Swift won't auto-promote
+            // CGFloat <-> Float in arithmetic, even where the bit-widths
+            // happen to match).
+            let wireTilt = Float.pi / 2 - Float(pen.altitudeAngle)
 
             pkt.setPencil(
                 x: Float(pen.location.x),
