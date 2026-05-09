@@ -3,6 +3,9 @@
 // Shows discovered LAN devices with signal bars and ms readout.
 // Connects to IExtendSession.startBrowsing() and observes the peer list
 // from Signaling.swift via the session actor.
+//
+// Also contains `ManualPairViewModel` and the "Pair manually" section that
+// drives the simple-pair-v0 handshake via `PairingFlow.pair(...)`.
 
 #if canImport(UIKit)
 import SwiftUI
@@ -277,6 +280,278 @@ private struct DimButton: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - ManualPairViewModel
+
+/// Drives the "Pair manually" form and invokes `PairingFlow.pair(...)`.
+@MainActor
+public final class ManualPairViewModel: ObservableObject {
+
+    // MARK: Input fields
+
+    @Published public var hostIP: String    = "192.168.1.10"
+    @Published public var portText: String  = "12345"
+    @Published public var pin: String       = ""
+    @Published public var deviceName: String = "My iPad"
+
+    // MARK: State
+
+    @Published public private(set) var isPairing: Bool = false
+    @Published public private(set) var result: PairResult? = nil
+    @Published public private(set) var errorMessage: String? = nil
+
+    /// True while the toast (success or error) should be visible.
+    @Published public var showToast: Bool = false
+
+    // MARK: Derived
+
+    var portNumber: UInt16? {
+        guard let n = UInt16(portText) else { return nil }
+        return n
+    }
+
+    var isInputValid: Bool {
+        !hostIP.isEmpty &&
+        portNumber != nil &&
+        pin.count == 4 &&
+        pin.allSatisfy(\.isNumber) &&
+        !deviceName.isEmpty
+    }
+
+    // Lightweight IPv4-ish validation: 1–3 digits, dot, repeat, no leading zeros.
+    var hostIPValid: Bool {
+        let parts = hostIP.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return false }
+        return parts.allSatisfy { part in
+            guard let n = Int(part), n >= 0, n <= 255 else { return false }
+            return part.count == 1 || part.first != "0"
+        }
+    }
+
+    // MARK: Actions
+
+    public func startPairing() {
+        guard isInputValid, let port = portNumber else { return }
+        isPairing = true
+        errorMessage = nil
+        result = nil
+        showToast = false
+
+        Task {
+            do {
+                let r = try await PairingFlow.pair(
+                    host: hostIP,
+                    port: port,
+                    pin: pin,
+                    displayName: deviceName
+                )
+                self.result = r
+                self.isPairing = false
+                self.showToast = true
+                // Auto-dismiss success toast after 4 seconds.
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                if self.result != nil { self.showToast = false }
+            } catch {
+                self.errorMessage = error.localizedDescription
+                self.isPairing = false
+                self.showToast = true
+                // Auto-dismiss error toast after 6 seconds.
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                if self.result == nil { self.showToast = false }
+            }
+        }
+    }
+}
+
+// MARK: - ManualPairSection
+
+/// The "Pair manually" card embedded at the bottom of DiscoverView.
+public struct ManualPairSection: View {
+    @Environment(\.colorScheme) private var cs
+    @Environment(\.theme) private var t
+
+    @StateObject private var vm = ManualPairViewModel()
+
+    public init() {}
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+
+            // Section header
+            Text("Pair manually")
+                .font(.body(13, weight: .semibold))
+                .foregroundStyle(t.ink2)
+                .textCase(.uppercase)
+                .kerning(0.1)
+
+            // Form card
+            VStack(spacing: 0) {
+                fieldRow(label: "Host IP", placeholder: "192.168.1.10",
+                         text: $vm.hostIP, keyboard: .decimalPad)
+                    .overlay(
+                        vm.hostIP.isEmpty || vm.hostIPValid
+                        ? nil
+                        : AnyView(
+                            HStack {
+                                Spacer()
+                                Image(systemName: "exclamationmark.circle")
+                                    .foregroundStyle(t.red)
+                                    .padding(.trailing, 16)
+                            }
+                        )
+                    )
+
+                divider
+
+                fieldRow(label: "Port", placeholder: "12345",
+                         text: $vm.portText, keyboard: .numberPad)
+
+                divider
+
+                fieldRow(label: "PIN", placeholder: "4 digits",
+                         text: $vm.pin, keyboard: .numberPad)
+                    .onChange(of: vm.pin) { _, new in
+                        // Clamp to 4 digits.
+                        let filtered = String(new.filter(\.isNumber).prefix(4))
+                        if filtered != new { vm.pin = filtered }
+                    }
+
+                divider
+
+                fieldRow(label: "Device name", placeholder: "My iPad",
+                         text: $vm.deviceName, keyboard: .default)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(t.card)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(t.sep, lineWidth: 1)
+                    )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            // Pair button
+            Button(action: vm.startPairing) {
+                HStack(spacing: 8) {
+                    if vm.isPairing {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                            .scaleEffect(0.8)
+                    }
+                    Text(vm.isPairing ? "Pairing…" : "Pair")
+                        .font(.body(15, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(vm.isInputValid && !vm.isPairing
+                              ? t.accent
+                              : t.accent.opacity(0.4))
+                )
+                .foregroundStyle(.white)
+            }
+            .disabled(!vm.isInputValid || vm.isPairing)
+            .buttonStyle(.plain)
+
+            // Toast overlay (success / error)
+            if vm.showToast {
+                toastView
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.3), value: vm.showToast)
+    }
+
+    // MARK: Sub-views
+
+    private func fieldRow(
+        label: String,
+        placeholder: String,
+        text: Binding<String>,
+        keyboard: UIKeyboardType
+    ) -> some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .font(.body(14))
+                .foregroundStyle(t.ink)
+                .frame(minWidth: 100, alignment: .leading)
+
+            TextField(placeholder, text: text)
+                .keyboardType(keyboard)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .font(.body(14))
+                .foregroundStyle(t.ink)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var divider: some View {
+        Divider()
+            .frame(height: 0.5)
+            .background(t.sep)
+            .padding(.leading, 16)
+    }
+
+    private var toastView: some View {
+        HStack(spacing: 10) {
+            if let result = vm.result {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(t.green)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Paired!")
+                        .font(.body(14, weight: .semibold))
+                        .foregroundStyle(t.ink)
+                    Text("ID: \(result.pairId.prefix(8))…")
+                        .font(.mono(11))
+                        .foregroundStyle(t.ink2)
+                }
+            } else {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(t.red)
+                Text(vm.errorMessage ?? "Unknown error")
+                    .font(.body(13))
+                    .foregroundStyle(t.ink)
+                    .lineLimit(3)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(t.card2)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(
+                            vm.result != nil ? t.green.opacity(0.4) : t.red.opacity(0.4),
+                            lineWidth: 1
+                        )
+                )
+        )
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+    }
+}
+
+// MARK: - DiscoverView extension: inject ManualPairSection
+
+extension DiscoverView {
+    /// A version of the view body that appends the manual-pair section.
+    /// Call `discoverWithManualPair()` from the navigation host instead of
+    /// `DiscoverView(...)` when you want the full onboarding flow.
+    public func withManualPairSection() -> some View {
+        VStack(spacing: 0) {
+            self
+            ManualPairSection()
+                .padding(.horizontal, 36)
+                .padding(.bottom, 28)
+        }
     }
 }
 

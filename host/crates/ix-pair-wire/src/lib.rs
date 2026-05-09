@@ -53,6 +53,36 @@ pub enum PairKind {
     PCertReq = 0x03,
     /// host → iPad: AES-GCM-wrapped signed device cert.
     PCertOk = 0x04,
+    /// iPad → host: simple-pair-v0 hello. Body is JSON:
+    /// `{"pin":"1234","client_pubkey_b64":"...","display_name":"iPad of Bob"}`.
+    ///
+    /// # SECURITY NOTE
+    ///
+    /// **simple-pair-v0 is plaintext on the wire.** The PIN and the client
+    /// public key are visible to any passive observer with LAN visibility
+    /// during the 60-second pairing window. Specifically:
+    ///
+    /// - A passive LAN sniffer can recover the PIN by replaying captured
+    ///   frames to a freshly-opened pairing session (replay attack).
+    /// - Man-in-the-middle: an active attacker who can intercept the TCP
+    ///   stream can substitute their own public key before the daemon pins it.
+    ///
+    /// **Mitigations for MVP / dev / demo use:**
+    /// - The PIN window is short (60 seconds) and single-shot.
+    /// - Deployment on a paired router or personal hotspot keeps passive
+    ///   observers off the segment in the common case.
+    /// - The host daemon logs the paired device name + pubkey fingerprint so
+    ///   the user can spot unexpected pairings via `iextend-tray` settings.
+    ///
+    /// **Production path:** port the Rust SPAKE2 implementation to Swift via
+    /// an xcframework (tracked as future work). Once that lands, the iPad
+    /// switches to `PStart` / `PResponse` / `PCertReq` / `PCertOk` and
+    /// `PSimpleHello` / `PSimpleAck` become deprecated and eventually removed.
+    PSimpleHello = 0x10,
+    /// host → iPad: simple-pair-v0 acknowledgement.
+    /// On success: `{"pair_id":"uuid-...","host_pubkey_b64":"...","ok":true}`.
+    /// On failure: `{"ok":false,"error":"wrong PIN"}`.
+    PSimpleAck = 0x11,
     /// either side: terminal error (with code in body[0..2]).
     PErr = 0xFF,
 }
@@ -65,6 +95,8 @@ impl PairKind {
             0x02 => Self::PResponse,
             0x03 => Self::PCertReq,
             0x04 => Self::PCertOk,
+            0x10 => Self::PSimpleHello,
+            0x11 => Self::PSimpleAck,
             0xFF => Self::PErr,
             _ => return None,
         })

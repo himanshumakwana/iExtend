@@ -20,11 +20,16 @@ public enum PairWireError: Error, Equatable {
 }
 
 public enum PairKind: UInt8 {
-    case pStart    = 0x01
-    case pResponse = 0x02
-    case pCertReq  = 0x03
-    case pCertOk   = 0x04
-    case pErr      = 0xFF
+    case pStart       = 0x01
+    case pResponse    = 0x02
+    case pCertReq     = 0x03
+    case pCertOk      = 0x04
+    /// iPad → host: simple-pair-v0 hello (plaintext JSON).
+    /// See `ix_pair_wire::PairKind::PSimpleHello` for the full security note.
+    case pSimpleHello = 0x10
+    /// host → iPad: simple-pair-v0 acknowledgement (plaintext JSON).
+    case pSimpleAck   = 0x11
+    case pErr         = 0xFF
 }
 
 public struct PairWire {
