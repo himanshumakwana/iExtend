@@ -19,8 +19,11 @@
 
 #![allow(dead_code)]
 
-use anyhow::{anyhow, Context, Result};
+#[cfg(unix)]
+use anyhow::Context;
+use anyhow::{anyhow, Result};
 use ed25519_dalek::{SigningKey, VerifyingKey};
+#[cfg(unix)]
 use rand_core::OsRng;
 use std::path::{Path, PathBuf};
 
