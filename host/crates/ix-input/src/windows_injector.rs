@@ -37,6 +37,15 @@ pub struct WindowsInjector {
     _device: (),
 }
 
+// SAFETY: HANDLE wraps `*mut c_void` so it's `!Send + !Sync` by default, but
+// Win32 file handles are thread-safe to use from multiple threads — the kernel
+// serializes per-handle IO. The Injector trait requires Send + Sync because
+// the dispatcher feeds events from a tokio worker; this is fine for our use.
+#[cfg(windows)]
+unsafe impl Send for WindowsInjector {}
+#[cfg(windows)]
+unsafe impl Sync for WindowsInjector {}
+
 impl WindowsInjector {
     /// Open the vhf-stylus device node.
     pub fn new() -> io::Result<Self> {

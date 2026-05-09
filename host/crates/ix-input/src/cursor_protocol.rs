@@ -101,12 +101,8 @@ impl CursorEmitter {
 /// where there is no display server).
 #[cfg(windows)]
 fn sample_cursor_pos() -> (f32, f32) {
-    // SAFETY: GetCursorPos is a simple kernel32 call; no invariants beyond
-    // a valid POINT pointer.
-    use std::mem::MaybeUninit;
-    // windows crate not pulled in here to keep the dependency graph small.
-    // In production this will be replaced by a real windows-rs call.
-    let _ = (); // suppress dead-code warning
+    // Stub. Production impl will use windows::Win32::UI::WindowsAndMessaging::GetCursorPos.
+    // POINT impls Default in windows = 0.58, so the call site won't need MaybeUninit.
     (0.0, 0.0)
 }
 
