@@ -1,0 +1,62 @@
+# XcodeGen spec for the iExtend iPad app.
+#
+# Generated into iExtend.xcodeproj at CI time so neither the project file nor
+# the various derived workspace settings have to live in git. Run locally with:
+#
+#     brew install xcodegen
+#     cd ipad && xcodegen generate
+#
+# Produces an iOS-only app target that links the three SwiftPM library
+# products (iExtendKit / iExtendUI / iExtendInput) declared in Package.swift,
+# plus the WebRTC.xcframework binary that ipad-ci.yml downloads into
+# Frameworks/. The build is unsigned — distribution-signed builds happen in
+# release.yml via fastlane match on tag push.
+
+name: iExtend
+
+options:
+  bundleIdPrefix: com.iextend
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "17.0"
+
+packages:
+  iExtendPackages:
+    path: .
+
+targets:
+  iExtend:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: iExtend
+        excludes:
+          - Info.plist
+    settings:
+      base:
+        INFOPLIST_FILE: iExtend/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.iextend.app
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+        TARGETED_DEVICE_FAMILY: 2          # iPad-only
+        SUPPORTS_MACCATALYST: NO
+        # Unsigned by default — ipad-ci packages an unsigned .ipa. release.yml
+        # overrides these for fastlane-match signing on tag push.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        DEVELOPMENT_TEAM: ""
+        ENABLE_BITCODE: NO
+        SWIFT_VERSION: "5.9"
+    dependencies:
+      - package: iExtendPackages
+        product: iExtendKit
+      - package: iExtendPackages
+        product: iExtendUI
+      - package: iExtendPackages
+        product: iExtendInput
+      - framework: Frameworks/WebRTC.xcframework
+        embed: true
+        codeSign: false
