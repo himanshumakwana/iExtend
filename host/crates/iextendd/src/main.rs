@@ -36,9 +36,39 @@ async fn main() -> anyhow::Result<()> {
 
     #[cfg(windows)]
     {
-        // Windows named-pipe loop: accept one client at a time, spawn server task per conn.
-        // (Implementer follows tonic's named-pipe example; ~30 lines.)
-        anyhow::bail!("Windows named-pipe accept loop is left as the implementer's exercise; pattern in tonic/examples/src/uds");
+        use async_stream::try_stream;
+        use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
+
+        let pipe_name = endpoint.0.clone();
+
+        // tonic wants Stream<Item = Result<IO, E>> where IO is AsyncRead+AsyncWrite.
+        // On Unix, tokio_stream::UnixListenerStream provides that. On Windows we
+        // yield each connected NamedPipeServer instance and pre-create the next
+        // so the pipe is always listening for additional clients.
+        let incoming = try_stream! {
+            // Bind the first instance up-front so the pipe exists before
+            // serve_with_incoming starts polling — clients (iextend-tray) get
+            // ERROR_FILE_NOT_FOUND otherwise.
+            let mut server: NamedPipeServer = ServerOptions::new()
+                .first_pipe_instance(true)
+                .create(&pipe_name)?;
+            loop {
+                server.connect().await?;
+                let connected = server;
+                // first_pipe_instance must be false for subsequent instances
+                // of the same pipe name.
+                server = ServerOptions::new()
+                    .first_pipe_instance(false)
+                    .create(&pipe_name)?;
+                yield connected;
+            }
+        };
+
+        tokio::pin!(incoming);
+        tokio::select! {
+            res = Server::builder().add_service(svc).serve_with_incoming(incoming) => res?,
+            _ = wait_for_shutdown_signal() => info!("Ctrl-C received, shutting down"),
+        }
     }
 
     info!(uptime_s = started.elapsed().as_secs(), "iextendd stopped");

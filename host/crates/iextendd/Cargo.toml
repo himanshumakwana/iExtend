@@ -48,6 +48,9 @@ uuid               = { version = "1", features = ["v4"] }
 [target.'cfg(windows)'.dependencies]
 ix-display-windows = { path = "../ix-display-windows" }
 windows            = { version = "0.58", features = ["Win32_Security_Cryptography"] }
+# Windows named-pipe accept loop in main.rs uses async-stream's try_stream!
+# to yield each connected NamedPipeServer instance to tonic.
+async-stream       = "0.3"
 
 [target.'cfg(unix)'.dependencies]
 ix-display-linux   = { path = "../ix-display-linux" }
