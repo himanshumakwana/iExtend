@@ -14,6 +14,8 @@
 
 import Foundation
 import Atomics
+import CoreVideo
+import CoreMedia
 
 // MARK: - Frame slot
 

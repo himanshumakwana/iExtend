@@ -11,6 +11,8 @@
 // Dependencies: WebRTC.xcframework (Stasel build, M127+)
 
 import Foundation
+import CoreVideo
+import CoreMedia
 #if canImport(WebRTC)
 import WebRTC
 #endif

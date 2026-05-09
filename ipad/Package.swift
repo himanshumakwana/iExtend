@@ -9,6 +9,11 @@ let package = Package(
     name: "iExtend",
     platforms: [
         .iOS(.v17),
+        // macOS is declared so `swift test` on the macOS-15 CI runner can
+        // build cross-platform code (Network framework, AsyncStream, Task)
+        // that needs macOS 10.15+. UIKit/iOS-only files are gated behind
+        // `#if canImport(UIKit)` so they're excluded on macOS host builds.
+        .macOS(.v14),
     ],
     products: [
         .library(name: "iExtendKit",   targets: ["iExtendKit"]),
