@@ -17,6 +17,8 @@ windows = { version = "0.58", features = [
     "Win32_Security",
     "Win32_System_SystemServices",
     "Win32_System_WindowsProgramming",
+    # Plan 5 frame_pump uses QueryPerformanceFrequency for slot timing.
+    "Win32_System_Performance",
 ] }
 tokio     = { workspace = true }
 thiserror = { workspace = true }

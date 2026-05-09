@@ -91,12 +91,12 @@ impl Connection {
                 proc,
                 &mut new_handle,
                 0,
-                false,
-                0x0002, // DUPLICATE_SAME_ACCESS
+                windows::Win32::Foundation::BOOL(0), // bInheritHandle = FALSE
+                windows::Win32::Foundation::DUPLICATE_HANDLE_OPTIONS(0x0002), // DUPLICATE_SAME_ACCESS
             )
         };
 
-        ok.map_err(|e| Error::Windows(e))?;
+        ok.map_err(Error::Windows)?;
         Ok(Self { handle: new_handle })
     }
 
