@@ -49,7 +49,7 @@ public final class PinnedFingerprintStore: @unchecked Sendable {
     }
 
     public func unpin(host: String) {
-        lock.withLock { store.removeValue(forKey: host) }
+        lock.withLock { _ = store.removeValue(forKey: host) }
     }
 }
 

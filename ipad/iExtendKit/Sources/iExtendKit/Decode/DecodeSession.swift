@@ -11,7 +11,13 @@
 
 import VideoToolbox
 import CoreMedia
-import CoreVideo
+// CVPixelBuffer is a CoreFoundation reference type that predates Swift
+// Sendable. The VTDecompressionSession callback hands it across an actor
+// boundary into `_onDecodedFrame` — safe in practice (CV buffers are
+// retain-counted and immutable once produced), but Swift 6 strict
+// concurrency would error. `@preconcurrency` keeps the import on the
+// Swift 5 isolation rules until the actor model is fleshed out (Plan 8).
+@preconcurrency import CoreVideo
 import Foundation
 
 // MARK: - Error

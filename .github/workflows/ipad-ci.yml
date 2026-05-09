@@ -190,7 +190,10 @@ jobs:
           if [ -d .build/debug ]; then
             # Copy SPM build outputs (libraries + tests). Useful for diffing
             # symbol exports between commits even when Xcode project is missing.
-            cp -R .build/debug ci-stage-spm/ 2>/dev/null || true
+            # `.build/debug` is a relative symlink (→ arm64-apple-macosx/debug);
+            # use `-L` to dereference, otherwise the upload step finds an empty
+            # ci-stage-spm/ and silently uploads nothing.
+            cp -RL .build/debug/ ci-stage-spm/debug/ 2>/dev/null || true
           fi
           ls -la ci-stage-spm/ || true
 
