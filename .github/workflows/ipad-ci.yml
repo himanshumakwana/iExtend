@@ -155,18 +155,21 @@ jobs:
         if: steps.detect-xcodeproj.outputs.exists == 'true'
         run: |
           set -eo pipefail
-          rm -rf build/derived Payload iExtend-unsigned.ipa
-          # Use -sdk iphoneos directly instead of -destination
-          # 'generic/platform=iOS'. The destination resolver wants a
-          # matching device-support payload that the macos-15 runner
-          # doesn't ship for 18.2; the SDK on its own is sufficient to
-          # compile a real-device .app bundle and is what `-showsdks`
-          # confirmed is installed.
-          xcodebuild build \
+          rm -rf build Payload iExtend-unsigned.ipa
+          # Use `xcodebuild archive` (not `build`) — archive is the
+          # canonical "build for distribution" entry point and is
+          # tolerant of no-device-attached, no-simulator-runtime CI
+          # boxes that defeat plain `build`. The resulting .xcarchive
+          # contains the unsigned .app under
+          # Products/Applications/iExtend.app which we then re-pack as
+          # an unsigned Payload/iExtend.ipa for AltStore consumption.
+          xcodebuild archive \
             -project iExtend.xcodeproj \
             -scheme iExtend \
             -configuration Release \
             -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/iExtend.xcarchive \
             -derivedDataPath build/derived \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
@@ -175,12 +178,13 @@ jobs:
             ENABLE_BITCODE=NO \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=NO \
+            SKIP_INSTALL=NO \
             2>&1 | tee ipa-build.log | xcbeautify --renderer github-actions
 
-          APP_PATH=$(find build/derived/Build/Products -name "iExtend.app" -type d -path "*-iphoneos/*" | head -1)
-          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
-            echo "::error::iExtend.app not found under build/derived/Build/Products/*-iphoneos/"
-            find build/derived/Build/Products -name "iExtend.app" -type d || true
+          APP_PATH="build/iExtend.xcarchive/Products/Applications/iExtend.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::iExtend.app not found at $APP_PATH"
+            find build -name "iExtend.app" -type d || true
             exit 1
           fi
           echo "Found app at: $APP_PATH"
