@@ -72,10 +72,7 @@ async fn main() -> anyhow::Result<()> {
             ) -> Poll<std::io::Result<usize>> {
                 Pin::new(&mut self.get_mut().0).poll_write(cx, buf)
             }
-            fn poll_flush(
-                self: Pin<&mut Self>,
-                cx: &mut Context<'_>,
-            ) -> Poll<std::io::Result<()>> {
+            fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
                 Pin::new(&mut self.get_mut().0).poll_flush(cx)
             }
             fn poll_shutdown(
