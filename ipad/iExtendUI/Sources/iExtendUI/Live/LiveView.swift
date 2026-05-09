@@ -7,8 +7,14 @@
 //         until DecodeSession starts producing frames.
 // Plan 8: reprojection and cursor mask are activated by MetalRenderer.
 
-#if canImport(UIKit)
 import SwiftUI
+
+// Toolbar configuration enums — referenced by FloatingToolbar (which doesn't
+// depend on UIKit) so they live outside the iOS-only gate.
+public enum ToolbarPosition: String, CaseIterable { case top, bottom, left }
+public enum ToolbarDensity:  String, CaseIterable { case compact, regular, comfy }
+
+#if canImport(UIKit)
 import iExtendKit
 
 public struct LiveView: View {
@@ -183,11 +189,6 @@ public final class SessionViewModel: ObservableObject {
         showSettings = true
     }
 }
-
-// MARK: - ToolbarPosition / ToolbarDensity
-
-public enum ToolbarPosition: String, CaseIterable { case top, bottom, left }
-public enum ToolbarDensity:  String, CaseIterable { case compact, regular, comfy }
 
 // MARK: - Preview
 
