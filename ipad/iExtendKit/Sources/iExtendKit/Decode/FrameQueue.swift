@@ -120,7 +120,7 @@ public final class FrameQueue: @unchecked Sendable {
 
 private extension Int {
     func nextPowerOfTwo(minimum: Int) -> Int {
-        var n = max(self, minimum)
+        var n = Swift.max(self, minimum)
         // Already a power of two?
         if n & (n - 1) == 0 { return n }
         n -= 1
