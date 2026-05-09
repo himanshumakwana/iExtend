@@ -12,6 +12,7 @@
 //          PencilLike, PressLike) so tests can pass synthetic events without
 //          needing real UITouch / UIPress instances.
 
+#if canImport(UIKit)
 import UIKit
 
 // ── Protocols for testability ─────────────────────────────────────────────────
@@ -299,3 +300,4 @@ private final class RealPencilTouch: PencilLike {
         self.predicted = predicted
     }
 }
+#endif

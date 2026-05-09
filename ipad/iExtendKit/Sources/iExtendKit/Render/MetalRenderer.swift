@@ -12,6 +12,7 @@
 //   - MTLCommandBuffer completion handlers run on the Metal thread.
 //   - FrameQueue is SPSC-safe: main thread is the sole consumer.
 
+#if canImport(UIKit)
 import Metal
 import MetalKit
 import QuartzCore
@@ -229,3 +230,4 @@ public enum RendererError: Error {
     case commandQueueFailed
     case pipelineFailed(String)
 }
+#endif

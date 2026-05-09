@@ -123,12 +123,16 @@ jobs:
       # SwiftPM-level tests (the iExtendKit / iExtendUI / iExtendInput packages
       # have their own XCTest targets). These only depend on swift-crypto +
       # swift-atomics + the WebRTC binary above.
+      #
+      # iOS-only files (UIKit, CADisplayLink in iOS form, etc.) live behind
+      # `#if canImport(UIKit)` so swift test can validate the manifest +
+      # cross-platform code on the macOS host. Real iOS-target tests will
+      # land via the xcodebuild step above once iExtend.xcodeproj is committed.
       - name: Swift package tests
+        if: hashFiles('ipad/Package.swift') != ''
         run: |
-          if [ -f Package.swift ]; then
-            swift test --parallel --enable-code-coverage 2>&1 \
-              | tee swift-test.log
-          fi
+          set -eo pipefail
+          swift test --parallel --enable-code-coverage 2>&1 | tee swift-test.log
 
       # ─── Produce CI artifact: simulator .app bundle ─────────────────
       # Without an Apple Developer Program signing identity in CI we cannot
