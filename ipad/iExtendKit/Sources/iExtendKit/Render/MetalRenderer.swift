@@ -70,7 +70,12 @@ public final class MetalRenderer: NSObject, @unchecked Sendable {
         metalLayer.device = dev
         metalLayer.pixelFormat = .bgra8Unorm_srgb
         metalLayer.framebufferOnly = false          // allow read-back for reprojection
+        // displaySyncEnabled is macOS-only; on iOS, vsync is implicit when
+        // the layer is driven by CADisplayLink and presentsWithTransaction
+        // is left at its default (false).
+        #if os(macOS)
         metalLayer.displaySyncEnabled = true        // tear-free
+        #endif
         metalLayer.maximumDrawableCount = 3         // triple-buffer
         self.layer = metalLayer
 
