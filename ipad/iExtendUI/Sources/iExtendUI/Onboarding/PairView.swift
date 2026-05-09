@@ -3,6 +3,7 @@
 // Two-column layout: Left = QR code card; Right = PinEntryView.
 // Plan 7 replaces the stub QR + PIN stub with SPAKE2 flow via PairingFlow.
 
+#if canImport(UIKit)
 import SwiftUI
 import iExtendKit
 
@@ -175,3 +176,4 @@ private struct FauxQRCode: View {
     }
     return Wrapper()
 }
+#endif

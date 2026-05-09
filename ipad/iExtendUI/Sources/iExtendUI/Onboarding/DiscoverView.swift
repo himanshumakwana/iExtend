@@ -4,6 +4,7 @@
 // Connects to IExtendSession.startBrowsing() and observes the peer list
 // from Signaling.swift via the session actor.
 
+#if canImport(UIKit)
 import SwiftUI
 import iExtendKit
 
@@ -298,3 +299,4 @@ private struct DimButton: View {
     .preferredColorScheme(.dark)
     .applyTheme(Theme(dark: true))
 }
+#endif
