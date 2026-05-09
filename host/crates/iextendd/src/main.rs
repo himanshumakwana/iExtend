@@ -37,30 +37,70 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(windows)]
     {
         use async_stream::try_stream;
+        use std::pin::Pin;
+        use std::task::{Context, Poll};
+        use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
         use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
+        use tonic::transport::server::Connected;
+
+        // Newtype wrapper around NamedPipeServer that implements
+        // tonic's Connected trait — required by serve_with_incoming.
+        // NamedPipeServer is already Unpin (HANDLE-based) so the wrapper
+        // can delegate AsyncRead/AsyncWrite via get_mut()-projection.
+        struct NamedPipeConn(NamedPipeServer);
+
+        impl Connected for NamedPipeConn {
+            type ConnectInfo = ();
+            fn connect_info(&self) -> Self::ConnectInfo {}
+        }
+
+        impl AsyncRead for NamedPipeConn {
+            fn poll_read(
+                self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+                buf: &mut ReadBuf<'_>,
+            ) -> Poll<std::io::Result<()>> {
+                Pin::new(&mut self.get_mut().0).poll_read(cx, buf)
+            }
+        }
+
+        impl AsyncWrite for NamedPipeConn {
+            fn poll_write(
+                self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+                buf: &[u8],
+            ) -> Poll<std::io::Result<usize>> {
+                Pin::new(&mut self.get_mut().0).poll_write(cx, buf)
+            }
+            fn poll_flush(
+                self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+            ) -> Poll<std::io::Result<()>> {
+                Pin::new(&mut self.get_mut().0).poll_flush(cx)
+            }
+            fn poll_shutdown(
+                self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+            ) -> Poll<std::io::Result<()>> {
+                Pin::new(&mut self.get_mut().0).poll_shutdown(cx)
+            }
+        }
 
         let pipe_name = endpoint.0.clone();
 
-        // tonic wants Stream<Item = Result<IO, E>> where IO is AsyncRead+AsyncWrite.
-        // On Unix, tokio_stream::UnixListenerStream provides that. On Windows we
-        // yield each connected NamedPipeServer instance and pre-create the next
-        // so the pipe is always listening for additional clients.
+        // Yield each connected NamedPipeServer wrapped in NamedPipeConn so
+        // tonic's serve_with_incoming sees a Connected-implementing IO type.
         let incoming = try_stream! {
-            // Bind the first instance up-front so the pipe exists before
-            // serve_with_incoming starts polling — clients (iextend-tray) get
-            // ERROR_FILE_NOT_FOUND otherwise.
             let mut server: NamedPipeServer = ServerOptions::new()
                 .first_pipe_instance(true)
                 .create(&pipe_name)?;
             loop {
                 server.connect().await?;
                 let connected = server;
-                // first_pipe_instance must be false for subsequent instances
-                // of the same pipe name.
                 server = ServerOptions::new()
                     .first_pipe_instance(false)
                     .create(&pipe_name)?;
-                yield connected;
+                yield NamedPipeConn(connected);
             }
         };
 
