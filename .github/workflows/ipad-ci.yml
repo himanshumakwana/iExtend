@@ -20,10 +20,13 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-15      # ships Xcode 16.x on the GitHub-hosted image
+    runs-on: macos-15
     defaults: { run: { working-directory: ipad } }
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
+    # NOTE: do NOT pin DEVELOPER_DIR here — the previous Xcode_16.2 pin
+    # locked the build to iOS SDK 18.2, but the macos-15 runner only
+    # preinstalls iOS simulator runtimes for whatever the *most recent*
+    # Xcode on the image bundles. The "Pick latest Xcode" step below
+    # selects the one whose SDK + runtime are guaranteed to match.
 
     steps:
       - uses: actions/checkout@v4
@@ -32,10 +35,30 @@ jobs:
           # is harmless if no LFS objects exist yet.
           lfs: true
 
+      - name: Pick latest Xcode (matching SDK + runtime)
+        run: |
+          set -eo pipefail
+          echo "::group::Installed Xcodes"
+          ls -d /Applications/Xcode_*.app 2>/dev/null || true
+          echo "::endgroup::"
+          echo "::group::Installed iOS simulator runtimes"
+          xcrun simctl list runtimes 2>/dev/null | grep iOS || true
+          echo "::endgroup::"
+
+          LATEST_XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$LATEST_XCODE" ]; then
+            echo "::error::No Xcode_*.app found in /Applications/"
+            exit 1
+          fi
+          echo "Selecting: $LATEST_XCODE"
+          sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
+          echo "DEVELOPER_DIR=$LATEST_XCODE/Contents/Developer" >> "$GITHUB_ENV"
+
       - name: Xcode + Swift versions
         run: |
           xcodebuild -version
           swift --version
+          xcodebuild -showsdks | grep -iE 'ios|iphoneos' || true
 
       # The macos-15 GitHub-hosted image ships Xcode 16.x with the iOS SDK
       # but the simulator runtime is occasionally absent (Apple ships them
