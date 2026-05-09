@@ -86,21 +86,31 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ipad/Frameworks/WebRTC.xcframework
-          key: webrtc-xcframework-M141-v1
+          # v2 bump: previous v1 cache appears to have captured a partial
+          # extraction from a failed earlier run (xcframework imports
+          # error out with 'sdk/objc/base/RTCMacros.h' file not found).
+          # Forces a fresh stasel download.
+          key: webrtc-xcframework-M141-v2
 
       - name: Download WebRTC.xcframework (stasel build)
         if: steps.webrtc-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
+          # Wipe any partial extraction left from a previous failed run
+          # before a fresh download. (cache@v4 always-restore semantics
+          # mean a half-extracted dir can otherwise persist.)
+          rm -rf Frameworks/WebRTC.xcframework
           mkdir -p Frameworks
-          # stasel publishes signed Apple-platform builds at
-          #   https://github.com/stasel/WebRTC/releases
-          # Asset filename is WebRTC-M<N>.xcframework.zip — pin a known tag.
           curl -L --fail \
             -o /tmp/WebRTC.xcframework.zip \
             https://github.com/stasel/WebRTC/releases/download/141.0.0/WebRTC-M141.xcframework.zip
           unzip -q /tmp/WebRTC.xcframework.zip -d Frameworks/
+          echo "::group::WebRTC.xcframework layout"
           ls Frameworks/
+          ls Frameworks/WebRTC.xcframework/ 2>/dev/null || true
+          ls Frameworks/WebRTC.xcframework/ios-arm64/ 2>/dev/null || true
+          find Frameworks/WebRTC.xcframework -name 'RTCMacros.h' | head -3 || true
+          echo "::endgroup::"
 
       # iExtend.xcodeproj is not committed — we generate it from
       # ipad/project.yml at CI time so neither the .pbxproj nor the
