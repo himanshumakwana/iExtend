@@ -1411,6 +1411,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "fake-ipad"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap",
+ "ed25519-dalek",
+ "hkdf",
+ "iextendd",
+ "ix-pair-wire",
+ "ix-rtc",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "sha2",
+ "spake2",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "fallible-iterator"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

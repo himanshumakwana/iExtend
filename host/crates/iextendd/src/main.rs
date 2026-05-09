@@ -21,6 +21,8 @@ async fn main() -> anyhow::Result<()> {
 
     let svc = grpc_server::DaemonImpl {
         started_at: started,
+        endpoint: endpoint.0.clone(),
+        state: std::sync::Arc::new(tokio::sync::RwLock::new(grpc_server::DaemonState::new())),
     };
     let svc = grpc_server::proto::daemon_server::DaemonServer::new(svc);
 

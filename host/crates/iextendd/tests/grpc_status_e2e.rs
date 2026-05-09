@@ -35,6 +35,10 @@ async fn status_rpc_round_trip() {
                     version: "test".into(),
                     uptime_s: self.started.elapsed().as_secs(),
                     session: 0,
+                    peers: Vec::new(),
+                    paired_count: 0,
+                    endpoint: String::new(),
+                    pairing_state: 0,
                 }))
             }
             async fn start_session(
@@ -54,9 +58,48 @@ async fn status_rpc_round_trip() {
                     stopped: false,
                 }))
             }
+            async fn begin_pairing(
+                &self,
+                _r: tonic::Request<_proto::BeginPairingRequest>,
+            ) -> Result<tonic::Response<_proto::PairingStatus>, tonic::Status> {
+                Ok(tonic::Response::new(_proto::PairingStatus::default()))
+            }
+            async fn get_pairing_status(
+                &self,
+                _r: tonic::Request<_proto::GetPairingStatusRequest>,
+            ) -> Result<tonic::Response<_proto::PairingStatus>, tonic::Status> {
+                Ok(tonic::Response::new(_proto::PairingStatus::default()))
+            }
+            async fn cancel_pairing(
+                &self,
+                _r: tonic::Request<_proto::CancelPairingRequest>,
+            ) -> Result<tonic::Response<_proto::CancelPairingReply>, tonic::Status> {
+                Ok(tonic::Response::new(_proto::CancelPairingReply::default()))
+            }
+            async fn list_paired_devices(
+                &self,
+                _r: tonic::Request<_proto::ListPairedDevicesRequest>,
+            ) -> Result<tonic::Response<_proto::ListPairedDevicesReply>, tonic::Status>
+            {
+                Ok(tonic::Response::new(
+                    _proto::ListPairedDevicesReply::default(),
+                ))
+            }
+            async fn forget_device(
+                &self,
+                _r: tonic::Request<_proto::ForgetDeviceRequest>,
+            ) -> Result<tonic::Response<_proto::ForgetDeviceReply>, tonic::Status> {
+                Ok(tonic::Response::new(_proto::ForgetDeviceReply::default()))
+            }
             async fn get_settings(
                 &self,
                 _r: tonic::Request<_proto::GetSettingsRequest>,
+            ) -> Result<tonic::Response<_proto::Settings>, tonic::Status> {
+                Ok(tonic::Response::new(_proto::Settings::default()))
+            }
+            async fn set_settings(
+                &self,
+                _r: tonic::Request<_proto::SetSettingsRequest>,
             ) -> Result<tonic::Response<_proto::Settings>, tonic::Status> {
                 Ok(tonic::Response::new(_proto::Settings::default()))
             }

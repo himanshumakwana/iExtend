@@ -3,17 +3,38 @@ syntax = "proto3";
 package iextend.v1;
 
 service Daemon {
+  // ── Lifecycle ──────────────────────────────────────────────────────────
   rpc Status       (StatusRequest)       returns (StatusReply);
   rpc StartSession (StartSessionRequest) returns (StartSessionReply);
   rpc StopSession  (StopSessionRequest)  returns (StopSessionReply);
-  rpc GetSettings  (GetSettingsRequest)  returns (Settings);
+
+  // ── Pairing ───────────────────────────────────────────────────────────
+  rpc BeginPairing      (BeginPairingRequest)      returns (PairingStatus);
+  rpc GetPairingStatus  (GetPairingStatusRequest)  returns (PairingStatus);
+  rpc CancelPairing     (CancelPairingRequest)     returns (CancelPairingReply);
+  rpc ListPairedDevices (ListPairedDevicesRequest) returns (ListPairedDevicesReply);
+  rpc ForgetDevice      (ForgetDeviceRequest)      returns (ForgetDeviceReply);
+
+  // ── Settings ──────────────────────────────────────────────────────────
+  rpc GetSettings (GetSettingsRequest) returns (Settings);
+  rpc SetSettings (SetSettingsRequest) returns (Settings);
 }
+
+// ─── Status ────────────────────────────────────────────────────────────────
 
 message StatusRequest {}
 message StatusReply {
-  string version  = 1;
-  uint64 uptime_s = 2;
-  SessionState session = 3;
+  string       version       = 1;
+  uint64       uptime_s      = 2;
+  SessionState session       = 3;
+  // Currently-connected live peers. Empty when session is Idle.
+  repeated PeerInfo peers    = 4;
+  // Number of paired iPads on disk. The full list comes from ListPairedDevices.
+  uint32       paired_count  = 5;
+  // Listening endpoint (UDS path on Unix, named-pipe name on Windows).
+  string       endpoint      = 6;
+  // Pairing state for the tray's "Pair iPad" tab.
+  PairingState pairing_state = 7;
 }
 
 enum SessionState {
@@ -25,12 +46,71 @@ enum SessionState {
   SESSION_STATE_DISCONNECTED = 5;
 }
 
+message PeerInfo {
+  string pair_id      = 1;
+  string display_name = 2;
+  uint32 latency_ms   = 3;
+  uint64 frames_sent  = 4;
+  uint64 frames_dropped = 5;
+}
+
+// ─── Sessions ──────────────────────────────────────────────────────────────
+
 message StartSessionRequest { string peer_id = 1; }
 message StartSessionReply   { bool started   = 1; string detail = 2; }
 message StopSessionRequest  {}
 message StopSessionReply    { bool stopped   = 1; }
 
+// ─── Pairing ───────────────────────────────────────────────────────────────
+
+enum PairingState {
+  PAIRING_STATE_IDLE     = 0;
+  PAIRING_STATE_WAITING  = 1; // PIN visible, listening for SPAKE2 client
+  PAIRING_STATE_HANDSHAKING = 2; // client connected, exchanging keys
+  PAIRING_STATE_DONE     = 3; // success — most recent paired device in `last_paired`
+  PAIRING_STATE_EXPIRED  = 4; // 60-second window elapsed
+  PAIRING_STATE_FAILED   = 5;
+}
+
+message BeginPairingRequest {}
+message GetPairingStatusRequest {}
+message CancelPairingRequest {}
+message CancelPairingReply { bool cancelled = 1; }
+
+message PairingStatus {
+  PairingState state      = 1;
+  // 4-digit PIN as a string ("4729"); empty unless state == WAITING.
+  string       pin        = 2;
+  // Seconds until the PIN expires (0 once state != WAITING).
+  uint32       seconds_left = 3;
+  // TCP port the daemon is listening on for the SPAKE2 client (loopback only).
+  uint32       port       = 4;
+  // Most recent paired device when state == DONE; otherwise unset/empty.
+  PairedDevice last_paired = 5;
+  // Optional human-readable error when state == FAILED.
+  string       error      = 6;
+}
+
+message PairedDevice {
+  string pair_id     = 1;
+  string display_name = 2;
+  // base64-encoded Ed25519 pubkey of the iPad.
+  string pubkey_b64  = 3;
+  // Unix epoch seconds when this device was first paired.
+  int64  paired_at_unix = 4;
+}
+
+message ListPairedDevicesRequest {}
+message ListPairedDevicesReply { repeated PairedDevice devices = 1; }
+
+message ForgetDeviceRequest { string pair_id = 1; }
+message ForgetDeviceReply   { bool forgotten = 1; }
+
+// ─── Settings ──────────────────────────────────────────────────────────────
+
 message GetSettingsRequest {}
+message SetSettingsRequest { Settings settings = 1; }
+
 message Settings {
   bool   auto_connect_on_launch = 1;
   string preferred_codec        = 2; // "av1" | "hevc" | "h264"

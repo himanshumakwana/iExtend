@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/iextendd",
     "crates/iextend-tray",
+    "crates/fake-ipad",
     "crates/ix-transport",
     "crates/ix-codec",
     "crates/ix-rtc",

@@ -6,8 +6,8 @@ fn main() -> eframe::Result<()> {
     init_logging();
     let opts = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([360.0, 240.0])
-            .with_min_inner_size([320.0, 200.0])
+            .with_inner_size([500.0, 420.0])
+            .with_min_inner_size([400.0, 320.0])
             .with_title("iExtend"),
         ..Default::default()
     };
