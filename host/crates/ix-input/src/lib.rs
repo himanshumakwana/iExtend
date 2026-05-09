@@ -20,15 +20,18 @@ pub mod wire;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+// Renamed from `windows` to avoid colliding with the external `windows` crate
+// of the same name — Rust resolves `use windows::*` inside the module file to
+// the local module, not the external crate, which broke the cfg(windows) build.
 #[cfg(windows)]
-pub mod windows;
+pub mod windows_injector;
 
 pub mod cursor_protocol;
 
 // ── Injector trait ────────────────────────────────────────────────────────────
 
 /// OS-specific input injector.  Implementations: [`linux::LinuxInjector`],
-/// [`windows::WindowsInjector`].
+/// [`windows_injector::WindowsInjector`].
 pub trait Injector: Send + Sync {
     /// Inject a single decoded packet into the OS input subsystem.
     fn inject(&self, p: &wire::Packet);
