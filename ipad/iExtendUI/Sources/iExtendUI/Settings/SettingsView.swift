@@ -3,6 +3,7 @@
 // Mirrors SceneSettings in scenes-ipad.jsx.
 // Groups: Connection / Display / Pencil & Touch / Performance / General / Diagnostics.
 
+#if canImport(UIKit)
 import SwiftUI
 import iExtendKit
 
@@ -466,3 +467,4 @@ private struct SparklineShape: Shape {
         .preferredColorScheme(.dark)
         .applyTheme(Theme(dark: true))
 }
+#endif

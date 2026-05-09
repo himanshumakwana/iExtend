@@ -7,6 +7,7 @@
 //         until DecodeSession starts producing frames.
 // Plan 8: reprojection and cursor mask are activated by MetalRenderer.
 
+#if canImport(UIKit)
 import SwiftUI
 import iExtendKit
 
@@ -195,3 +196,4 @@ public enum ToolbarDensity:  String, CaseIterable { case compact, regular, comfy
         .preferredColorScheme(.dark)
         .applyTheme(Theme(dark: true))
 }
+#endif
