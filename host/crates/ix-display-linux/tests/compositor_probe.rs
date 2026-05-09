@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 //! Unit tests for compositor / display-session detection.
 //!
 //! These tests do not open any real X11 or Wayland connection — they exercise

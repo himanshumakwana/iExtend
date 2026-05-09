@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 //! Unit tests for SecureBoot detection.
 //!
 //! These tests use the `SecureBootProbe` trait to inject synthetic EFI-variable

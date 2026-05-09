@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 //! Integration tests that require evdi loaded and a graphical session.
 //!
 //! Gate: these tests only run when compiled with `--features integration`.

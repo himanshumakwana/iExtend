@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 //! Tests for the NVIDIA proprietary-driver detection.
 //!
 //! These tests do not require GPU hardware.  They verify that the probe

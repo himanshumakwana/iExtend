@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 //! Unit tests for `x11::coalesce` — the damage-rectangle merger.
 //!
 //! These tests do not require a live X11 display.  They exercise the pure
