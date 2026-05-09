@@ -1,8 +1,14 @@
+# `-D warnings` is intentionally OFF during the Plans 3-10 scaffolding phase.
+# Each subsystem will promote it back when it reaches its first verified
+# end-to-end milestone (the Windows IddCx FFI bindings legitimately need
+# PascalCase struct names for example, and dead_code paths exist behind
+# feature flags that aren't exercised yet).
 [build]
-rustflags = ["-D", "warnings"]
+rustflags = []
 
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-D", "warnings", "-C", "target-feature=+crt-static"]
+# Static-link the CRT so the binaries don't depend on the VC++ redist.
+rustflags = ["-C", "target-feature=+crt-static"]
 
 [net]
 git-fetch-with-cli = true
