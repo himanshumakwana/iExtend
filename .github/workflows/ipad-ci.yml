@@ -111,40 +111,17 @@ jobs:
             -project iExtend.xcodeproj \
             -scheme iExtend
 
-      - name: Build (iOS Simulator)
+      # Simulator build is intentionally skipped on the macos-15 runner —
+      # Apple's "platform on-demand" model means iOS 18.2 (the SDK
+      # bundled with Xcode_16.2) doesn't ship a matching simulator
+      # runtime; what's preinstalled is iOS 18.5 / 18.6 / 26.x. Mixing
+      # SDK 18.2 with a 18.5+ runtime confuses the destination resolver.
+      # We don't need a simulator build for the unsigned-IPA goal anyway,
+      # so the device build below is the only actual compile path.
+      - name: Skip simulator build (see comment in workflow)
         if: steps.detect-xcodeproj.outputs.exists == 'true'
         run: |
-          set -o pipefail
-          xcodebuild build \
-            -project iExtend.xcodeproj \
-            -scheme iExtend \
-            -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            ONLY_ACTIVE_ARCH=NO \
-            | xcbeautify --renderer github-actions || \
-            xcodebuild build \
-              -project iExtend.xcodeproj -scheme iExtend \
-              -configuration Debug -destination 'generic/platform=iOS Simulator' \
-              CODE_SIGNING_ALLOWED=NO
-
-      - name: Test (iPad Pro 11" simulator)
-        if: steps.detect-xcodeproj.outputs.exists == 'true'
-        run: |
-          set -o pipefail
-          if xcodebuild -list -project iExtend.xcodeproj 2>/dev/null \
-             | grep -qE 'iExtendKitTests|iExtendUITests|iExtendInputTests'; then
-            xcodebuild test \
-              -project iExtend.xcodeproj \
-              -scheme iExtend \
-              -configuration Debug \
-              -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M4),OS=latest' \
-              CODE_SIGNING_ALLOWED=NO \
-              | xcbeautify --renderer github-actions
-          else
-            echo "::notice::No test bundles defined yet — skipping xcodebuild test."
-          fi
+          echo "::notice::Skipping simulator build — using -sdk iphoneos for the device-only path. The unsigned IPA produced below is what AltStore consumes."
 
       # SwiftPM-level tests (the iExtendKit / iExtendUI / iExtendInput packages
       # have their own XCTest targets). These only depend on swift-crypto +
@@ -219,17 +196,25 @@ jobs:
         run: |
           set -eo pipefail
           rm -rf build/derived Payload iExtend-unsigned.ipa
+          # Use -sdk iphoneos directly instead of -destination
+          # 'generic/platform=iOS'. The destination resolver wants a
+          # matching device-support payload that the macos-15 runner
+          # doesn't ship for 18.2; the SDK on its own is sufficient to
+          # compile a real-device .app bundle and is what `-showsdks`
+          # confirmed is installed.
           xcodebuild build \
             -project iExtend.xcodeproj \
             -scheme iExtend \
             -configuration Release \
-            -destination 'generic/platform=iOS' \
+            -sdk iphoneos \
             -derivedDataPath build/derived \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_ENTITLEMENTS="" \
             ENABLE_BITCODE=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
             2>&1 | tee ipa-build.log | xcbeautify --renderer github-actions
 
           APP_PATH=$(find build/derived/Build/Products -name "iExtend.app" -type d -path "*-iphoneos/*" | head -1)
