@@ -33,7 +33,13 @@ let package = Package(
                 .product(name: "Atomics",  package: "swift-atomics"),
                 .product(name: "Crypto",   package: "swift-crypto"),
             ],
-            path: "iExtendKit/Sources/iExtendKit"
+            path: "iExtendKit/Sources/iExtendKit",
+            // CursorMaskShader.metal is compiled by Xcode's Metal toolchain
+            // when iExtend.xcodeproj is the build driver. SwiftPM doesn't
+            // know what to do with .metal files (it would warn about an
+            // unhandled file), and the gated MetalRenderer never references
+            // it from the swift test path on macOS — so just exclude it.
+            exclude: ["Render/CursorMaskShader.metal"]
         ),
         .target(
             name: "iExtendUI",
