@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use std::time::Instant;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::{Endpoint, Server, Uri};

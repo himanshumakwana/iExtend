@@ -1,5 +1,6 @@
 use anyhow::Result;
 use ix_transport::LocalEndpoint;
+#[cfg(unix)]
 use tokio::net::UnixListener;
 
 #[allow(dead_code)]
