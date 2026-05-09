@@ -37,6 +37,23 @@ jobs:
           xcodebuild -version
           swift --version
 
+      # The macos-15 GitHub-hosted image ships Xcode 16.x with the iOS SDK
+      # but the simulator runtime is occasionally absent (Apple ships them
+      # as on-demand downloads). `xcodebuild -downloadPlatform iOS` pulls a
+      # matching runtime if missing — idempotent when already installed.
+      - name: Ensure iOS platform / simulator runtime
+        run: |
+          set -eo pipefail
+          xcodebuild -runFirstLaunch || true
+          # The download is large (~7 GB) and slow but cached by GH between
+          # runs via the Xcode toolchain cache. If `-downloadPlatform` errors
+          # out (sometimes flaky), the build steps will surface a clearer
+          # error message anyway.
+          sudo xcodebuild -downloadPlatform iOS 2>&1 | tail -5 || true
+          # Show what's actually available so failure logs are diagnosable.
+          xcrun simctl list runtimes
+          xcodebuild -showsdks | grep -E 'iOS|iphoneos' || true
+
       # WebRTC.framework binary (~280 MB) is not checked in (see
       # ipad/Frameworks/README.md). For CI we download a known-good stasel
       # build the first time and cache it. If the URL changes, bump the
