@@ -156,6 +156,138 @@ public struct PairingFlow {
         )
     }
 
+    // MARK: USB entry point
+
+    /// Variant of `pair(host:port:pin:displayName:)` that reuses an
+    /// already-accepted `NWConnection` rather than dialing a host. Used by
+    /// `USBPairingListener` once the laptop's daemon has opened a tunneled
+    /// TCP socket through usbmuxd.
+    ///
+    /// The connection passed in MUST have been `.start()`ed by the caller
+    /// (NWListener-accepted connections start in `.preparing` state and
+    /// transition to `.ready` once started). This helper waits for `.ready`
+    /// before sending.
+    public static func pairOverExistingConnection(
+        connection: NWConnection,
+        pin: String,
+        displayName: String
+    ) async throws -> PairResult {
+
+        // Same as `pair`: generate a fresh Curve25519 signing key.
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let publicKeyBytes = privateKey.publicKey.rawRepresentation
+        let publicKeyB64 = publicKeyBytes.base64EncodedString()
+
+        let helloPayload: [String: String] = [
+            "pin": pin,
+            "client_pubkey_b64": publicKeyB64,
+            "display_name": displayName,
+        ]
+        guard let helloBody = try? JSONEncoder().encode(helloPayload) else {
+            throw PairFlowError.malformedResponse("could not encode hello payload")
+        }
+        let helloFrame = PairWire(kind: .pSimpleHello, body: helloBody)
+
+        let ackFrame = try await sendAndAwaitAck(
+            connection: connection,
+            helloFrame: helloFrame
+        )
+
+        guard let ackDict = try? JSONDecoder().decode(
+            [String: AnyCodable].self,
+            from: ackFrame.body
+        ) else {
+            throw PairFlowError.malformedResponse("PSimpleAck body is not valid JSON")
+        }
+        if let okVal = ackDict["ok"]?.value as? Bool, !okVal {
+            let errMsg = (ackDict["error"]?.value as? String) ?? "unknown error"
+            throw PairFlowError.serverRejected(errMsg)
+        }
+        guard let pairId = ackDict["pair_id"]?.value as? String,
+              let hostPubkeyB64 = ackDict["host_pubkey_b64"]?.value as? String
+        else {
+            throw PairFlowError.malformedResponse("PSimpleAck missing pair_id or host_pubkey_b64")
+        }
+
+        let pairedAt = Date()
+        let keychainEntry = PairKeychainEntry(
+            pairId: pairId,
+            hostPubkeyB64: hostPubkeyB64,
+            displayName: displayName,
+            pairedAtUnix: Int64(pairedAt.timeIntervalSince1970),
+            clientPrivkeySeed: privateKey.rawRepresentation
+        )
+        let saveStatus = PairKeychain.save(keychainEntry)
+        if saveStatus != errSecSuccess && saveStatus != errSecDuplicateItem {
+            throw PairFlowError.keychainError(saveStatus)
+        }
+
+        return PairResult(
+            pairId: pairId,
+            hostPubkeyB64: hostPubkeyB64,
+            displayName: displayName,
+            pairedAt: pairedAt
+        )
+    }
+
+    /// Wait for an existing NWConnection to become `.ready`, then send
+    /// `helloFrame` and read back one frame. Mirrors `performHandshake`'s
+    /// behavior but doesn't dial a host.
+    private static func sendAndAwaitAck(
+        connection: NWConnection,
+        helloFrame: PairWire
+    ) async throws -> PairWire {
+        try await withCheckedThrowingContinuation { cont in
+            var resolved = false
+
+            func finish(_ result: Result<PairWire, Error>) {
+                guard !resolved else { return }
+                resolved = true
+                cont.resume(with: result)
+            }
+
+            // The connection may already be .ready when we attach the
+            // handler; if so we still get a .ready callback once.
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    do {
+                        let encoded = try helloFrame.encode()
+                        connection.send(
+                            content: encoded,
+                            completion: .contentProcessed { sendErr in
+                                if let e = sendErr {
+                                    finish(.failure(PairFlowError.networkFailed(e)))
+                                    return
+                                }
+                                readFrame(connection: connection) { result in
+                                    finish(result)
+                                }
+                            }
+                        )
+                    } catch {
+                        finish(.failure(PairFlowError.networkFailed(error)))
+                    }
+                case .failed(let e):
+                    finish(.failure(PairFlowError.networkFailed(e)))
+                case .cancelled:
+                    if !resolved {
+                        finish(.failure(PairFlowError.timeout))
+                    }
+                default:
+                    break
+                }
+            }
+
+            // 30-second handshake timeout matches the Wi-Fi flow.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 30) {
+                if !resolved {
+                    finish(.failure(PairFlowError.timeout))
+                }
+            }
+        }
+    }
+
     // MARK: TCP handshake
 
     /// Opens a TCP connection, sends `helloFrame`, and reads back one frame.

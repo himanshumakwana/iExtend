@@ -159,8 +159,19 @@ public final class SessionViewModel: ObservableObject {
 
     public let session: IExtendSession
 
+    /// Loopback listener for USB pair flow. Bound at `init`; views observe
+    /// `usbListener.pendingConnection` to present the USB PIN sheet. Fails
+    /// silently in Simulator / on a non-iOS host where 7780 might be busy —
+    /// USB pair just won't work in those environments.
+    public let usbListener = USBPairingListener()
+
     public init(session: IExtendSession) {
         self.session = session
+        do {
+            try usbListener.start()
+        } catch {
+            print("USBPairingListener.start failed: \(error)")
+        }
         Task { await observeSession() }
     }
 

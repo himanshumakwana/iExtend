@@ -88,8 +88,67 @@ jobs:
           These executables are produced from a CI build for testing only.
           Signed MSIX packages for distribution are produced by release.yml
           when a release tag (v*) is pushed.
+
+          USB PAIR (optional)
+          -------------------
+          The USB pair flow uses Apple's usbmuxd protocol via libimobile-
+          device. To enable it on Windows:
+
+            1. Install the Apple Devices app from the Microsoft Store
+               (this provides Apple Mobile Device Service, the underlying
+               USB driver stack).
+            2. Make sure libusbmuxd*.dll is on PATH or sitting next to
+               iextendd.exe. CI attempts to bundle the DLLs in this
+               folder via the next step; if they're not present, USB pair
+               will be unavailable but Wi-Fi pair keeps working.
           "@ | Out-File target/ci-stage/README.txt -Encoding ascii
           Get-ChildItem target/ci-stage
+
+      # Bundle libimobiledevice + libusbmuxd DLLs from msys2's mingw-w64
+      # repo so USB pair works without the user having to source the
+      # binaries themselves. ix-usb's runtime LoadLibrary picks them up
+      # if they sit next to iextendd.exe.
+      #
+      # This step is best-effort. If msys2 doesn't have the package or
+      # the network errors out, we just continue without the DLLs and
+      # USB pair remains unavailable on the resulting Windows build —
+      # Wi-Fi pair is untouched. Hence continue-on-error: true.
+      - name: Bundle libimobiledevice DLLs (Windows, best-effort)
+        if: matrix.os == 'windows-2022'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $msys2 = "C:\msys64\usr\bin\bash.exe"
+          if (-not (Test-Path $msys2)) {
+            Write-Warning "msys2 not found at C:\msys64; skipping DLL bundle."
+            exit 0
+          }
+          & $msys2 -lc "pacman -Sy --noconfirm --needed mingw-w64-x86_64-libimobiledevice mingw-w64-x86_64-libusbmuxd" 2>&1 | Tee-Object -FilePath dll-install.log
+          $dllSrc = "C:\msys64\mingw64\bin"
+          $copied = 0
+          $patterns = @(
+            "libimobiledevice*.dll",
+            "libusbmuxd*.dll",
+            "libplist*.dll",
+            "libssl*.dll",
+            "libcrypto*.dll",
+            "zlib*.dll",
+            "libgcc_s*.dll",
+            "libwinpthread*.dll",
+            "libstdc++*.dll"
+          )
+          foreach ($pat in $patterns) {
+            Get-ChildItem -Path $dllSrc -Filter $pat -ErrorAction SilentlyContinue | ForEach-Object {
+              Copy-Item $_.FullName target/ci-stage/
+              $copied += 1
+            }
+          }
+          if ($copied -eq 0) {
+            Write-Warning "No libimobiledevice DLLs copied — USB pair will be unavailable in this artifact."
+          } else {
+            Write-Host "Bundled $copied DLLs for USB pair."
+          }
+          Get-ChildItem target/ci-stage | Format-Table Name, Length
 
       - name: Upload Windows artifacts
         if: matrix.os == 'windows-2022'

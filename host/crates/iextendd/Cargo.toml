@@ -15,6 +15,11 @@ name = "iextend-daemon"
 maintainer = "iExtend contributors"
 section = "net"
 priority = "optional"
+# libimobiledevice6 + usbmuxd power the USB pair flow (ix-usb / usb_listener).
+# Marked Recommends rather than Depends so the package still installs in
+# environments that don't need USB pair — the daemon falls back to Wi-Fi-only
+# pair when the libs are absent.
+recommends = "libimobiledevice6, usbmuxd"
 extended-description = "Host daemon that captures the laptop display, encodes it, and streams to a paired iPad acting as a wireless second screen."
 assets = [
     ["target/release/iextendd", "/usr/bin/", "755"],

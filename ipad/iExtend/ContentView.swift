@@ -12,6 +12,7 @@
 //   .failed            → WelcomeView (error banner)
 
 import SwiftUI
+import UIKit
 import iExtendKit
 import iExtendUI
 
@@ -29,6 +30,11 @@ public struct ContentView: View {
 
     // Settings sheet
     @State private var showSettings = false
+
+    // USB pair sheet — observes the listener's pendingConnection.
+    @State private var usbPin: String = ""
+    @State private var usbBusy: Bool = false
+    @State private var usbError: String?
 
     public init() {}
 
@@ -54,8 +60,85 @@ public struct ContentView: View {
             SettingsView(session: sessionViewModel)
                 .applyTheme(Theme(dark: cs == .dark))
         }
+        .sheet(item: usbPendingBinding()) { _ in
+            usbPairSheetContent
+        }
         .onChange(of: sessionViewModel.showSettings) { _, show in
             if show { showSettings = true; sessionViewModel.showSettings = false }
+        }
+    }
+
+    /// Bridge `usbListener.pendingConnection` (an Identifiable struct) into a
+    /// `Binding<USBPendingConnection?>` for the `.sheet(item:)` presenter.
+    /// Setting the binding to nil cancels the pending connection.
+    private func usbPendingBinding() -> Binding<USBPendingConnection?> {
+        Binding(
+            get: { sessionViewModel.usbListener.pendingConnection },
+            set: { newValue in
+                if newValue == nil {
+                    sessionViewModel.usbListener.cancelPending()
+                    usbPin = ""
+                    usbError = nil
+                }
+            }
+        )
+    }
+
+    private var usbPairSheetContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Pair over USB")
+                .font(.title2.weight(.semibold))
+            Text("Your laptop is requesting to pair. Enter the 4-digit PIN shown in the iExtend tray on the laptop.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                TextField("PIN", text: $usbPin)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 160)
+                Spacer()
+            }
+
+            if let err = usbError {
+                Text(err).foregroundStyle(.red).font(.callout)
+            }
+
+            HStack {
+                Button("Cancel") {
+                    sessionViewModel.usbListener.cancelPending()
+                    usbPin = ""
+                    usbError = nil
+                }
+                .disabled(usbBusy)
+                Spacer()
+                Button(usbBusy ? "Pairing…" : "Pair") {
+                    submitUSBPin()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(usbBusy || usbPin.count < 4)
+            }
+            Spacer()
+        }
+        .padding(24)
+        .presentationDetents([.medium])
+    }
+
+    private func submitUSBPin() {
+        usbBusy = true
+        usbError = nil
+        let pin = usbPin
+        let displayName = UIDevice.current.name
+        Task {
+            await sessionViewModel.usbListener.completePair(pin: pin, displayName: displayName)
+            await MainActor.run {
+                usbBusy = false
+                if case .failure(let msg) = sessionViewModel.usbListener.lastResult {
+                    usbError = msg
+                } else {
+                    usbPin = ""
+                }
+            }
         }
     }
 
