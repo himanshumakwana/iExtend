@@ -40,6 +40,7 @@
 
 use crate::grpc_server::DaemonState;
 use anyhow::Result;
+use ix_rtc::rtc_peer::RtcPeer;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -49,6 +50,7 @@ use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
+use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
 
 /// Default port the signaling listener binds to. Configurable via
 /// `Settings.signaling_port` so users behind unusual firewalls can move it,
@@ -117,19 +119,61 @@ pub async fn run(state: Arc<RwLock<DaemonState>>, cancel: CancellationToken) -> 
     }
 }
 
-/// Per-connection task: reads frames from the socket, forwards them to the
-/// session loop's inbound queue; writes outbound frames the session loop
-/// hands us back. For M3 we don't actually have a session loop yet — the
-/// connection_loop just echoes Offer→Answer with a placeholder SDP so the
-/// iPad can verify the channel is alive. M4 will replace the echo with a
-/// real WebRTC peer-connection bridge.
-async fn connection_loop(
-    mut stream: TcpStream,
+/// Per-connection task. Owns one `RtcPeer` for the lifetime of the TCP
+/// connection: applies the iPad's offer, generates an answer, exchanges
+/// ICE candidates, and forwards the encoder's video sink (added in M4d) to
+/// the WebRTC peer connection.
+///
+/// Three concurrent surfaces:
+/// - `read_msg(reader)` — drain inbound SignalMsgs from the iPad
+/// - `pc.on_ice_candidate` — forward locally-gathered ICE candidates back
+///   to the iPad over the same socket
+/// - `cancel.cancelled()` — daemon shutdown
+pub async fn connection_loop(
+    stream: TcpStream,
     addr: SocketAddr,
     _state: Arc<RwLock<DaemonState>>,
     cancel: CancellationToken,
 ) -> Result<()> {
-    let (mut reader, mut writer) = stream.split();
+    let (mut reader, mut writer) = stream.into_split();
+
+    // Create the peer eagerly. ~5ms cost; failing here means the iPad
+    // sees the TCP socket close immediately rather than getting a stub
+    // answer that goes nowhere.
+    let peer = match RtcPeer::new().await {
+        Ok(p) => Arc::new(p),
+        Err(e) => {
+            warn!(?addr, err = %e, "signaling: RtcPeer::new failed");
+            return Err(anyhow::anyhow!("RtcPeer::new: {e}"));
+        }
+    };
+
+    // Outbound queue — webrtc-rs's ICE candidate callback runs on its own
+    // task pool and can't write directly to the socket, so it pushes here
+    // and the select! below drains.
+    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<SignalMsg>();
+
+    // Wire ICE candidate gathering. `None` means gathering complete; we
+    // forward only `Some(...)` since the iPad's WebRTC.framework treats
+    // null candidates as end-of-candidates differently.
+    let out_tx_for_ice = out_tx.clone();
+    peer.pc
+        .on_ice_candidate(Box::new(move |c: Option<RTCIceCandidate>| {
+            let tx = out_tx_for_ice.clone();
+            Box::pin(async move {
+                if let Some(c) = c {
+                    if let Ok(json) = c.to_json() {
+                        // RTCIceCandidateInit::candidate is the SDP "candidate:..."
+                        // string the peer needs to feed to its add_ice_candidate.
+                        let _ = tx.send(SignalMsg::Ice {
+                            candidate: json.candidate,
+                        });
+                    }
+                }
+            })
+        }));
+
+    info!(?addr, "signaling: RtcPeer initialised, awaiting offer");
 
     loop {
         tokio::select! {
@@ -141,23 +185,31 @@ async fn connection_loop(
                 match msg {
                     Ok(SignalMsg::Offer { sdp }) => {
                         info!(?addr, sdp_len = sdp.len(), "signaling: received offer");
-                        // M3 placeholder: echo back a stub answer so the iPad's
-                        // gRPC stream sees both directions working. M4 wires the
-                        // real WebRTC peer-connection here.
-                        let stub = SignalMsg::Answer {
-                            sdp: format!(
-                                "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=stub-answer\r\n\
-                                 c=IN IP4 127.0.0.1\r\nt=0 0\r\n# offer was {} bytes",
-                                sdp.len()
-                            ),
-                        };
-                        write_msg(&mut writer, &stub).await?;
+                        match peer.apply_offer_create_answer(&sdp).await {
+                            Ok(answer_sdp) => {
+                                let answer = SignalMsg::Answer { sdp: answer_sdp };
+                                if let Err(e) = write_msg(&mut writer, &answer).await {
+                                    warn!(?addr, err = %e, "signaling: write answer failed");
+                                    return Err(e);
+                                }
+                                info!(?addr, "signaling: sent answer");
+                            }
+                            Err(e) => {
+                                warn!(?addr, err = %e, "signaling: apply_offer_create_answer failed");
+                                return Err(e);
+                            }
+                        }
                     }
                     Ok(SignalMsg::Answer { sdp }) => {
-                        info!(?addr, sdp_len = sdp.len(), "signaling: received answer");
+                        // We're the answerer in the iPad-initiated flow; an
+                        // unexpected Answer here means the peer mixed up roles.
+                        // Log + ignore rather than crashing the channel.
+                        info!(?addr, sdp_len = sdp.len(), "signaling: ignoring unexpected Answer");
                     }
                     Ok(SignalMsg::Ice { candidate }) => {
-                        info!(?addr, cand = %candidate, "signaling: received ICE candidate");
+                        if let Err(e) = peer.add_ice_candidate(&candidate).await {
+                            warn!(?addr, err = %e, "signaling: add_ice_candidate failed");
+                        }
                     }
                     Ok(SignalMsg::Bye) => {
                         info!(?addr, "signaling: peer said bye");
@@ -167,6 +219,12 @@ async fn connection_loop(
                         warn!(?addr, err = %e, "signaling: read error");
                         return Err(e);
                     }
+                }
+            }
+            Some(out) = out_rx.recv() => {
+                if let Err(e) = write_msg(&mut writer, &out).await {
+                    warn!(?addr, err = %e, "signaling: write outbound failed");
+                    return Err(e);
                 }
             }
         }

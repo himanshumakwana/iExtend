@@ -1,7 +1,12 @@
-//! End-to-end smoke test for the WebRTC signaling channel.
+//! End-to-end smoke test for the WebRTC signaling channel + RtcPeer
+//! bridge (Plan A milestones M3 + M4b).
 //!
-//! Spawns the daemon's signaling listener on an ephemeral port, opens a
-//! TCP client, sends an Offer, expects to receive a stub Answer.
+//! Drives the real `connection_loop` with a real `RtcPeer` client over
+//! a TCP socket. Validates that:
+//!   - daemon side accepts an SDP offer
+//!   - daemon's RtcPeer generates a compatible Answer
+//!   - the answer is structurally valid WebRTC SDP (v=0, m=video, H264)
+//!   - the client's RtcPeer accepts the daemon's answer without error
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,75 +16,71 @@ use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn signaling_offer_round_trips_to_answer() {
-    // Use the real `signaling::run` but bind to port 0 by stubbing the
-    // listener directly. Since the public run() hard-codes 7783, we
-    // re-spawn its connection_loop via the public types instead.
-    //
-    // For this M3 smoke test we just stand up a TcpListener on an
-    // ephemeral port and run `connection_loop` on each accepted socket.
+async fn signaling_offer_round_trips_through_real_rtc_peer() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let cancel = CancellationToken::new();
     let state = Arc::new(RwLock::new(iextendd::DaemonState::new()));
 
-    // _state and _cancel are kept alive for symmetry with the real
-    // signaling::run signature; the test echo helper doesn't actually use
-    // them since the M3 daemon-side echo doesn't read state either.
-    let _state_for_loop = state.clone();
-    let _cancel_for_loop = cancel.clone();
+    // Spawn the real daemon-side connection_loop.
+    let cancel_for_loop = cancel.clone();
+    let state_for_loop = state.clone();
     tokio::spawn(async move {
         if let Ok((stream, addr)) = listener.accept().await {
-            handle_test_connection(stream, addr).await.ok();
+            let _ =
+                iextendd::signaling::connection_loop(stream, addr, state_for_loop, cancel_for_loop)
+                    .await;
         }
     });
 
-    // Client side: open TCP, send an offer, expect a stub answer back.
+    // Client side: build a real RtcPeer to generate a valid offer.
+    let alice = ix_rtc::rtc_peer::RtcPeer::new().await.unwrap();
+    let offer_sdp = alice.create_offer().await.unwrap();
+
     let mut client = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
 
+    // Send the offer.
     let offer = iextendd::signaling::SignalMsg::Offer {
-        sdp: "v=0\r\no=test\r\n".into(),
+        sdp: offer_sdp.clone(),
     };
     write_msg(&mut client, &offer).await.unwrap();
 
-    let answer = tokio::time::timeout(Duration::from_secs(2), read_msg(&mut client))
-        .await
-        .expect("timed out waiting for answer")
-        .expect("read failed");
-
-    match answer {
-        iextendd::signaling::SignalMsg::Answer { sdp } => {
-            assert!(
-                sdp.contains("stub-answer"),
-                "expected stub-answer SDP, got: {sdp}"
-            );
+    // Drain incoming frames until we get an Answer. The daemon may
+    // interleave Ice candidates ahead of the answer (webrtc-rs's
+    // gathering callback fires concurrently with set_local_description),
+    // so we filter on the variant.
+    let answer_sdp = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match read_msg(&mut client).await.unwrap() {
+                iextendd::signaling::SignalMsg::Answer { sdp } => return sdp,
+                iextendd::signaling::SignalMsg::Ice { candidate } => {
+                    eprintln!("(received ICE candidate during answer wait: {candidate})");
+                }
+                other => panic!("unexpected variant before Answer: {other:?}"),
+            }
         }
-        other => panic!("expected Answer, got {other:?}"),
-    }
+    })
+    .await
+    .expect("timed out waiting for real Answer");
+
+    eprintln!("daemon answered with SDP ({} bytes)", answer_sdp.len());
+    assert!(answer_sdp.starts_with("v=0"));
+    assert!(answer_sdp.contains("m=video"));
+    assert!(
+        answer_sdp.contains("H264") || answer_sdp.contains("h264"),
+        "answer should advertise H.264"
+    );
+
+    // Round-trip the answer back into the client peer to confirm SDP
+    // compatibility — this is the strongest signal that the daemon's peer
+    // produced something webrtc-rs can ingest.
+    alice
+        .apply_answer(&answer_sdp)
+        .await
+        .expect("client peer rejected daemon's answer");
 
     cancel.cancel();
-}
-
-async fn handle_test_connection(
-    mut stream: tokio::net::TcpStream,
-    _addr: std::net::SocketAddr,
-) -> anyhow::Result<()> {
-    let (mut reader, mut writer) = stream.split();
-    let msg = read_msg(&mut reader).await?;
-    match msg {
-        iextendd::signaling::SignalMsg::Offer { sdp } => {
-            let stub = iextendd::signaling::SignalMsg::Answer {
-                sdp: format!(
-                    "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=stub-answer\r\n\
-                     c=IN IP4 127.0.0.1\r\nt=0 0\r\n# offer was {} bytes",
-                    sdp.len()
-                ),
-            };
-            write_msg(&mut writer, &stub).await?;
-        }
-        _ => {}
-    }
-    Ok(())
+    alice.close().await;
 }
 
 async fn read_msg<R: AsyncReadExt + Unpin>(
