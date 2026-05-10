@@ -160,7 +160,13 @@ public struct ContentView: View {
                 onManualIP: handleManualIP,
                 onRescan: handleRescan
             )
-            .withManualPairSection()
+            .withManualPairSection { _, hostIP in
+                // Pair succeeded — kick off the WebRTC streaming session
+                // against the laptop. SessionViewModel publishes the
+                // session; LiveView observes it and shows RemoteVideoView
+                // when state == .connected.
+                sessionViewModel.startStreaming(host: hostIP)
+            }
 
         case .enteringPin, .spake2Handshake, .exchangingCert:
             if let peer = selectedPeer {

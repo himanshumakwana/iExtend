@@ -30,9 +30,19 @@ public struct LiveView: View {
 
     public var body: some View {
         ZStack {
-            // Metal render surface (fills the entire screen)
-            MetalLayerHost(frameQueue: sessionViewModel.frameQueue)
-                .ignoresSafeArea()
+            // Render path priority:
+            //   1. WebRTC session is connected → use RTCMTLVideoView via
+            //      RemoteVideoView. This is the Plan A first-pixel path.
+            //   2. Fallback to MetalLayerHost (Plan 6 scaffold) so existing
+            //      tests + frameQueue-based renders still work.
+            if let session = sessionViewModel.webrtcSession,
+               session.state == .connected {
+                RemoteVideoView(session: session)
+                    .ignoresSafeArea()
+            } else {
+                MetalLayerHost(frameQueue: sessionViewModel.frameQueue)
+                    .ignoresSafeArea()
+            }
 
             // Overlays
             overlayLayer
@@ -165,6 +175,12 @@ public final class SessionViewModel: ObservableObject {
     /// USB pair just won't work in those environments.
     public let usbListener = USBPairingListener()
 
+    /// Active WebRTC streaming session. Nil until `startStreaming(host:)` is
+    /// called after a successful pair; created fresh per "connect" press.
+    /// Views observe its published state and attach the remote-video
+    /// renderer when it transitions to `.connected`.
+    @Published public var webrtcSession: WebRTCSession?
+
     public init(session: IExtendSession) {
         self.session = session
         do {
@@ -173,6 +189,67 @@ public final class SessionViewModel: ObservableObject {
             print("USBPairingListener.start failed: \(error)")
         }
         Task { await observeSession() }
+    }
+
+    /// Start a screen-share session to `host`. Tears down any existing
+    /// WebRTC session first. The caller (ContentView post-pair) is
+    /// responsible for keeping the host IP — we don't persist it.
+    ///
+    /// As a side effect we drive the underlying `IExtendSession` through
+    /// .connecting → .live so the LiveView UI swaps in correctly. State
+    /// is mirrored from the WebRTC session's published `state`.
+    public func startStreaming(host: String) {
+        Task { @MainActor in
+            if let existing = webrtcSession {
+                await existing.stop()
+            }
+            let s = WebRTCSession(host: host)
+            self.webrtcSession = s
+
+            // Move the IExtendSession to .connecting immediately so any
+            // existing UI driven by `sessionState` (ConnectingOverlay)
+            // shows up while WebRTC negotiates.
+            let hostInfo = HostInfo(
+                displayName: "iExtend host",
+                ipAddress: host,
+                pubkeyThumbprint: "",
+                osHint: ""
+            )
+            await session.connect(to: hostInfo)
+
+            await s.start()
+
+            // Mirror WebRTC state into SessionState. We poll s.state on
+            // each main-actor tick rather than subscribing to a publisher
+            // because @Published doesn't expose an async stream we can
+            // for-await directly.
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                while self.webrtcSession === s {
+                    switch s.state {
+                    case .connected:
+                        await self.session.wentLive(stats: .zero)
+                    case .failed(let reason):
+                        await self.session.fail(.unknown(message: reason))
+                    case .closed:
+                        await self.session.disconnect(reason: .userRequested)
+                    default:
+                        break
+                    }
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                }
+            }
+        }
+    }
+
+    /// Tear down the streaming session.
+    public func stopStreaming() {
+        Task { @MainActor in
+            if let s = webrtcSession {
+                await s.stop()
+                self.webrtcSession = nil
+            }
+        }
     }
 
     private func observeSession() async {

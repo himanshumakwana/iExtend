@@ -353,6 +353,11 @@ public final class ManualPairViewModel: ObservableObject {
 
     // MARK: Actions
 
+    /// Optional callback fired after a successful pair, with the host IP
+    /// the user typed. ContentView wires this to start a `WebRTCSession`
+    /// against that host.
+    public var onPaired: ((PairResult, String) -> Void)?
+
     public func startPairing() {
         guard isInputValid, let port = portNumber else { return }
         isPairing = true
@@ -371,6 +376,7 @@ public final class ManualPairViewModel: ObservableObject {
                 self.result = r
                 self.isPairing = false
                 self.showToast = true
+                self.onPaired?(r, self.hostIP)
                 // Auto-dismiss success toast after 4 seconds.
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
                 if self.result != nil { self.showToast = false }
@@ -394,8 +400,11 @@ public struct ManualPairSection: View {
     @Environment(\.theme) private var t
 
     @StateObject private var vm = ManualPairViewModel()
+    private let onPaired: ((PairResult, String) -> Void)?
 
-    public init() {}
+    public init(onPaired: ((PairResult, String) -> Void)? = nil) {
+        self.onPaired = onPaired
+    }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -411,6 +420,13 @@ public struct ManualPairSection: View {
             VStack(spacing: 0) {
                 fieldRow(label: "Host IP", placeholder: "192.168.1.10",
                          text: $vm.hostIP, keyboard: .decimalPad)
+                    .onAppear {
+                        // Wire the success-callback once the @StateObject vm
+                        // is alive. Subsequent body re-evaluations won't
+                        // re-fire onAppear, but the closure capture is
+                        // stable so this is safe.
+                        vm.onPaired = onPaired
+                    }
                     .overlay(
                         vm.hostIP.isEmpty || vm.hostIPValid
                         ? nil
@@ -566,10 +582,17 @@ extension DiscoverView {
     /// A version of the view body that appends the manual-pair section.
     /// Call `discoverWithManualPair()` from the navigation host instead of
     /// `DiscoverView(...)` when you want the full onboarding flow.
-    public func withManualPairSection() -> some View {
+    ///
+    /// `onPaired` is fired (with the host IP the user typed) once a pair
+    /// completes successfully — ContentView wires this to start a
+    /// `WebRTCSession` against that host, which begins the screen-share
+    /// flow.
+    public func withManualPairSection(
+        onPaired: ((PairResult, String) -> Void)? = nil
+    ) -> some View {
         VStack(spacing: 0) {
             self
-            ManualPairSection()
+            ManualPairSection(onPaired: onPaired)
                 .padding(.horizontal, 36)
                 .padding(.bottom, 28)
         }
