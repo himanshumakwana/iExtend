@@ -116,4 +116,9 @@ message Settings {
   string preferred_codec        = 2; // "av1" | "hevc" | "h264"
   uint32 max_bitrate_kbps       = 3;
   bool   hdr_enabled            = 4;
+  // Preferred TCP port for the pairing listener. Daemon tries this first;
+  // falls back to a random ephemeral port (:0) if it's already in use.
+  // Default is 7779 — see DEFAULT_PAIR_PORT in pair_listener.rs. A value of
+  // 0 explicitly requests an ephemeral port (the original behaviour).
+  uint32 pair_port              = 5;
 }

@@ -42,6 +42,16 @@ use crate::grpc_server::{
 /// Window length the tray displays + listener honours.
 pub const PAIR_WINDOW_SECS: u64 = 60;
 
+/// Default TCP port for the pairing listener. Stable so users can save it
+/// in the iPad's manual-pair form and re-pair without re-typing. If 7779
+/// is already bound (another process or a still-shutting-down listener
+/// from a previous run), we fall back to an ephemeral port.
+///
+/// Why 7779: 7-7-7-9 is mnemonic ("seventy-seven seventy-nine"), in the
+/// IANA user range (1024-49151), and not assigned to any well-known
+/// service per the IANA registry as of 2026.
+pub const DEFAULT_PAIR_PORT: u16 = 7779;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Wire-body helpers for PCertReq / PCertOk.
 //
@@ -158,9 +168,35 @@ pub async fn spawn_with_state(
     pin: String,
     state: Arc<RwLock<DaemonState>>,
 ) -> Result<(u16, tokio::task::JoinHandle<()>)> {
-    let listener = TcpListener::bind("0.0.0.0:0").await?;
+    // Resolve preferred port from settings: 0 (or unset) → use DEFAULT_PAIR_PORT.
+    // Any other value is taken at face value (lets an admin pin an alternate
+    // port in environments where 7779 is already taken by something else).
+    let preferred_port: u16 = {
+        let s = state.read().await;
+        let p = s.settings.pair_port;
+        if p == 0 {
+            DEFAULT_PAIR_PORT
+        } else {
+            p as u16
+        }
+    };
+
+    // Try the preferred port first; on EADDRINUSE (or any bind failure) fall
+    // back to an OS-assigned ephemeral port so pairing still works even when
+    // the well-known port is held by a stale instance or another app.
+    let listener = match TcpListener::bind(("0.0.0.0", preferred_port)).await {
+        Ok(l) => l,
+        Err(e) => {
+            warn!(
+                preferred_port,
+                err = %e,
+                "preferred pair port unavailable, falling back to ephemeral"
+            );
+            TcpListener::bind("0.0.0.0:0").await?
+        }
+    };
     let port = listener.local_addr()?.port();
-    info!(port, "pairing listener bound");
+    info!(port, preferred_port, "pairing listener bound");
 
     let handle = tokio::spawn(async move {
         let deadline = tokio::time::Instant::now() + StdDuration::from_secs(PAIR_WINDOW_SECS);

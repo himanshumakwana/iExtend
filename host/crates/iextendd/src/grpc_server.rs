@@ -58,6 +58,7 @@ impl DaemonState {
                 preferred_codec: "hevc".into(),
                 max_bitrate_kbps: 80_000,
                 hdr_enabled: false,
+                pair_port: crate::pair_listener::DEFAULT_PAIR_PORT as u32,
             },
         }
     }

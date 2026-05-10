@@ -53,6 +53,7 @@ pub struct TrayApp {
     max_bitrate: String,
     auto_connect: bool,
     hdr_enabled: bool,
+    pair_port: String,
 }
 
 impl TrayApp {
@@ -106,6 +107,7 @@ impl TrayApp {
             max_bitrate: "80000".into(),
             auto_connect: false,
             hdr_enabled: false,
+            pair_port: "7779".into(),
         }
     }
 }
@@ -560,6 +562,26 @@ impl TrayApp {
                     self.settings_dirty = true;
                 }
                 ui.end_row();
+
+                ui.label("Pairing port:");
+                ui.horizontal(|ui| {
+                    let resp = ui.add(
+                        egui::TextEdit::singleline(&mut self.pair_port)
+                            .desired_width(80.0)
+                            .hint_text("7779"),
+                    );
+                    if resp.changed() {
+                        self.settings_dirty = true;
+                    }
+                    ui.label(
+                        egui::RichText::new(
+                            "(default 7779; blank = daemon default; falls back to a random port if busy)",
+                        )
+                        .small()
+                        .color(egui::Color32::from_gray(140)),
+                    );
+                });
+                ui.end_row();
             });
 
         ui.add_space(8.0);
@@ -567,11 +589,17 @@ impl TrayApp {
             let save_btn = ui.add_enabled(self.settings_dirty, egui::Button::new("Save"));
             if save_btn.clicked() {
                 let bitrate = self.max_bitrate.parse::<u32>().unwrap_or(80_000);
+                // Empty input → 0 → daemon falls back to its compiled-in
+                // DEFAULT_PAIR_PORT. Non-numeric input is also treated as 0
+                // rather than rejected — the textbox isn't strict, the
+                // daemon is the source of truth.
+                let pair_port = self.pair_port.trim().parse::<u32>().unwrap_or(0);
                 let new_settings = crate::client::proto::Settings {
                     auto_connect_on_launch: self.auto_connect,
                     preferred_codec: self.pref_codec.clone(),
                     max_bitrate_kbps: bitrate,
                     hdr_enabled: self.hdr_enabled,
+                    pair_port,
                 };
                 let ep = self.endpoint.clone();
                 match self.rt.block_on(client::set_settings(&ep, new_settings)) {
@@ -612,6 +640,13 @@ impl TrayApp {
         self.pref_codec = s.preferred_codec.clone();
         self.max_bitrate = s.max_bitrate_kbps.to_string();
         self.hdr_enabled = s.hdr_enabled;
+        // pair_port == 0 means "use the daemon default"; show it as an empty
+        // string so the user sees the placeholder rather than a literal "0".
+        self.pair_port = if s.pair_port == 0 {
+            String::new()
+        } else {
+            s.pair_port.to_string()
+        };
         self.settings = Some(s);
     }
 }
