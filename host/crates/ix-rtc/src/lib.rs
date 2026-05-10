@@ -19,10 +19,13 @@ pub mod channels;
 pub mod heartbeat;
 /// WebRTC peer connection — owns video track and DataChannels.
 pub mod peer;
+/// Real `webrtc-rs`-backed peer connection (Plan A milestone M4).
+pub mod rtc_peer;
 /// SDP offer/answer + cert-pinning hook.
 pub mod signaling;
 
 pub use peer::Peer;
+pub use rtc_peer::RtcPeer;
 
 use thiserror::Error;
 

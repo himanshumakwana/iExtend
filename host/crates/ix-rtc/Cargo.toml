@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+anyhow         = { workspace = true }
 async-trait    = { workspace = true }
 thiserror      = { workspace = true }
 tracing        = { workspace = true }
@@ -27,6 +28,12 @@ zeroize        = "1"
 
 ix-pair-wire   = { path = "../ix-pair-wire" }
 ix-codec       = { path = "../ix-codec" }
+
+# Real WebRTC stack. webrtc-rs 0.11 is the latest with a stable public API
+# matching what we need (RTCPeerConnection, ICE, SDP, DTLS-SRTP, RTP track
+# senders). Pulled in for the M4 milestone of Plan A; the scaffolded
+# `peer.rs` Peer type stays for the in-process loopback tests.
+webrtc         = "0.11"
 
 [dev-dependencies]
 hex            = "0.4"
