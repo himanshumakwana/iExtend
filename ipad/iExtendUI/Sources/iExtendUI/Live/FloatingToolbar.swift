@@ -97,6 +97,10 @@ public struct FloatingToolbar: View {
                 )
                 .padding(isVertical ? .vertical : .horizontal, 4)
 
+            // Brand mark (no float — toolbar glass already has its own depth)
+            LogoMark(size: 22, floats: false)
+                .padding(isVertical ? .vertical : .horizontal, 4)
+
             // Buttons
             ForEach(toolbarItems, id: \.key) { item in
                 ToolbarButton(item: item, size: btnSize) {
