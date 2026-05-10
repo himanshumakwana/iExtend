@@ -13,6 +13,7 @@ members = [
     "crates/ix-display-windows",
     "crates/ix-display-linux",
     "crates/ix-input",
+    "crates/ix-usb",
     # Bench camera-rig timecode tool (not part of the shipping product).
     # Depends on platform display APIs (DXGI, DRM) — built only when needed.
     # Canonical source: bench/camera-rig/screen-timecode/ (mirrored here for workspace).

@@ -2353,6 +2353,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ix-usb"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crossbeam-channel",
+ "libloading",
+ "once_cell",
+ "tracing",
+]
+
+[[package]]
 name = "jni"
 version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
