@@ -31,11 +31,13 @@
     clippy::type_complexity
 )]
 
+mod dxgi_capture;
 mod error;
 mod frame_pump;
 mod iddcx_bindings;
 mod inverted_call;
 
+pub use dxgi_capture::{spawn_capture_thread, CaptureError, CapturedFrame};
 pub use error::{Error, Result};
 pub use frame_pump::GpuFrame;
 
