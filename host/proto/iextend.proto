@@ -35,6 +35,20 @@ message StatusReply {
   string       endpoint      = 6;
   // Pairing state for the tray's "Pair iPad" tab.
   PairingState pairing_state = 7;
+  // iPads currently attached over USB (libimobiledevice / usbmuxd). Empty
+  // when no device is plugged in or libimobiledevice isn't installed.
+  repeated UsbDeviceInfo usb_devices = 8;
+}
+
+// ─── USB devices ───────────────────────────────────────────────────────────
+
+message UsbDeviceInfo {
+  // 40-char hex UDID reported by usbmuxd.
+  string udid         = 1;
+  // Friendly device name (from lockdownd; empty until we wire that lookup).
+  string display_name = 2;
+  // Apple product type identifier, e.g. "iPad13,1".
+  string product_type = 3;
 }
 
 enum SessionState {

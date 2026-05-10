@@ -36,7 +36,9 @@ ix-rtc             = { path = "../ix-rtc" }
 ix-discover        = { path = "../ix-discover" }
 ix-input           = { path = "../ix-input" }
 ix-pair-wire       = { path = "../ix-pair-wire" }
+ix-usb             = { path = "../ix-usb" }
 serde_json         = "1"
+tokio-util         = "0.7"
 
 # Plan 7 keystore
 ed25519-dalek      = { version = "2", features = ["rand_core", "pkcs8"] }

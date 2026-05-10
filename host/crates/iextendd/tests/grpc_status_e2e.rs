@@ -39,6 +39,7 @@ async fn status_rpc_round_trip() {
                     paired_count: 0,
                     endpoint: String::new(),
                     pairing_state: 0,
+                    usb_devices: Vec::new(),
                 }))
             }
             async fn start_session(

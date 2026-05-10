@@ -531,6 +531,66 @@ async fn handle_simple_one(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// USB pair entry point.
+//
+// Wi-Fi pair flow has the iPad as the TCP client, hitting the daemon's
+// listener. USB inverts that: the daemon is the TCP client, connecting
+// through usbmuxd to the iPad's loopback listener on 127.0.0.1:7780. The
+// resulting socket speaks the same simple-pair-v0 wire protocol, so the
+// existing `handle_one` does the actual work — this wrapper is just the
+// state-machine glue (Waiting → Handshaking → Done/Failed).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Drive a simple-pair-v0 / SPAKE2 handshake on a USB-tunneled stream.
+///
+/// Caller is `usb_listener::handle_usb_stream`. PIN is sourced from the
+/// current pair window (`state.pairing.pin`); if no window is active, the
+/// connection is dropped with an error so a future `BeginPairing` click is
+/// required before the iPad can pair.
+pub async fn handle_one_usb(
+    stream: TcpStream,
+    addr: SocketAddr,
+    state: Arc<RwLock<DaemonState>>,
+) -> Result<()> {
+    let pin = state.read().await.pairing.pin.clone();
+    if pin.is_empty() {
+        return Err(anyhow::anyhow!(
+            "USB connect arrived but no pair PIN is active — click \"Begin pairing\" in the tray first"
+        ));
+    }
+
+    {
+        let mut s = state.write().await;
+        if s.pairing.state == PairingState::Waiting as i32 {
+            s.pairing.state = PairingState::Handshaking as i32;
+        }
+    }
+
+    let mut server = PairingServer::new(&pin);
+    let result = handle_one(stream, addr, &mut server, state.clone()).await;
+
+    match &result {
+        Ok(Some(device)) => {
+            let mut s = state.write().await;
+            s.pairing.state = PairingState::Done as i32;
+            s.pairing.seconds_left = 0;
+            s.pairing.pin.clear();
+            s.pairing.port = 0;
+            s.pairing.last_paired = Some(device.clone());
+            info!(?addr, "USB pair complete");
+        }
+        Ok(None) | Err(_) => {
+            let mut s = state.write().await;
+            if s.pairing.state == PairingState::Handshaking as i32 {
+                s.pairing.state = PairingState::Waiting as i32;
+            }
+        }
+    }
+
+    result.map(|_| ())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Frame I/O helpers.
 // ─────────────────────────────────────────────────────────────────────────────
 

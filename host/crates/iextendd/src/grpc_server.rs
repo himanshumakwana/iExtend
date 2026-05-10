@@ -20,7 +20,7 @@ use proto::{
     ForgetDeviceReply, ForgetDeviceRequest, GetPairingStatusRequest, GetSettingsRequest,
     ListPairedDevicesReply, ListPairedDevicesRequest, PairedDevice, PairingState, PairingStatus,
     PeerInfo, SessionState, SetSettingsRequest, Settings, StartSessionReply, StartSessionRequest,
-    StatusReply, StatusRequest, StopSessionReply, StopSessionRequest,
+    StatusReply, StatusRequest, StopSessionReply, StopSessionRequest, UsbDeviceInfo,
 };
 
 /// Shared mutable daemon state.
@@ -38,6 +38,10 @@ pub struct DaemonState {
     pub peers: Vec<PeerInfo>,
     pub pairing: PairingStatus,
     pub settings: Settings,
+    /// iPads currently attached over USB (libimobiledevice / usbmuxd).
+    /// Updated by `usb_listener`. Empty when no USB device is plugged in or
+    /// when libimobiledevice isn't installed.
+    pub usb_devices: Vec<ix_usb::DeviceInfo>,
 }
 
 impl DaemonState {
@@ -60,6 +64,7 @@ impl DaemonState {
                 hdr_enabled: false,
                 pair_port: crate::pair_listener::DEFAULT_PAIR_PORT as u32,
             },
+            usb_devices: Vec::new(),
         }
     }
 }
@@ -75,6 +80,15 @@ impl Daemon for DaemonImpl {
     async fn status(&self, _r: Request<StatusRequest>) -> Result<Response<StatusReply>, Status> {
         let state = self.state.read().await;
         let paired_count = paired_count_via_pin_store();
+        let usb_devices: Vec<UsbDeviceInfo> = state
+            .usb_devices
+            .iter()
+            .map(|d| UsbDeviceInfo {
+                udid: d.udid.clone(),
+                display_name: d.name.clone().unwrap_or_default(),
+                product_type: d.product_type.clone().unwrap_or_default(),
+            })
+            .collect();
         Ok(Response::new(StatusReply {
             version: env!("CARGO_PKG_VERSION").to_string(),
             uptime_s: self.started_at.elapsed().as_secs(),
@@ -83,6 +97,7 @@ impl Daemon for DaemonImpl {
             paired_count,
             endpoint: self.endpoint.clone(),
             pairing_state: state.pairing.state,
+            usb_devices,
         }))
     }
 

@@ -172,7 +172,7 @@ impl eframe::App for TrayApp {
         // ── Main content ──────────────────────────────────────────────────
         egui::CentralPanel::default().show(ctx, |ui| match self.selected_tab {
             Tab::Home => self.draw_home(ui, &status, ctx),
-            Tab::Pair => self.draw_pair(ui, ctx),
+            Tab::Pair => self.draw_pair(ui, ctx, &status),
             Tab::Devices => self.draw_devices(ui),
             Tab::Sessions => self.draw_sessions(ui, &status),
             Tab::Settings => self.draw_settings(ui),
@@ -227,7 +227,7 @@ impl TrayApp {
         }
     }
 
-    fn draw_pair(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    fn draw_pair(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, status: &Option<StatusReply>) {
         // Read latest pairing status from the watch channel.
         let pair_status: Option<PairingStatus> = self.pair_rx.borrow().clone();
 
@@ -243,6 +243,35 @@ impl TrayApp {
         ui.heading("Pair iPad");
         ui.separator();
         ui.add_space(8.0);
+
+        // USB-connected iPads (libimobiledevice). Shown above the PIN UI so
+        // the user knows which transport will be used; the actual pair flow
+        // is the same simple-pair-v0 protocol either way.
+        if let Some(s) = status {
+            if !s.usb_devices.is_empty() {
+                let names: Vec<String> = s
+                    .usb_devices
+                    .iter()
+                    .map(|d| {
+                        if d.display_name.is_empty() {
+                            let short = if d.udid.len() > 8 {
+                                &d.udid[..8]
+                            } else {
+                                &d.udid
+                            };
+                            format!("iPad ({short}…)")
+                        } else {
+                            d.display_name.clone()
+                        }
+                    })
+                    .collect();
+                ui.colored_label(
+                    egui::Color32::from_rgb(0, 200, 80),
+                    format!("● USB connected: {}", names.join(", ")),
+                );
+                ui.add_space(8.0);
+            }
+        }
 
         if pairing_state == PairingState::Idle as i32 {
             if ui
