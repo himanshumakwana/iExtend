@@ -24,10 +24,9 @@ Crease lines drawn between panels at 0.6pt, white at 50–70% opacity, sell the 
 
 ### Floating effect
 
-- **Floor shadow:** elliptical, blurred (Gaussian σ≈4), 55% black, centered ~50pt below the geometric center.
-- **Ambient glow:** radial gradient (`#5e5ce6` 60% → 0%) sized roughly 80×50pt behind the panels.
-- **Dark mode:** glow at full strength as specified.
-- **Light mode:** glow opacity ÷ 2; floor shadow opacity × 0.6 (light backgrounds need less contrast).
+- **Floor shadow:** SwiftUI `.shadow(...)` modifier on the panels — 12pt blur radius, 8pt y-offset, black at 35% opacity in dark mode and 21% in light. (We initially scoped a separately-painted blurred ellipse but settled on the `.shadow` modifier — the panel geometry is irregular enough that a shape-conformant shadow reads as more believable than a centered ellipse, and it's one line vs. fifteen.)
+- **Ambient glow:** radial gradient (`#5e5ce6` 60% → 0%) sized roughly `size × 0.625` tall behind the panels, with an 8pt blur. Glow opacity is 0.6 in dark mode, 0.3 in light.
+- The icon SVG paints the halo separately (since rsvg-convert can't trace a SwiftUI `.shadow` from the panel paths) using a blurred indigo ellipse — but it omits the floor shadow, which iOS's icon mask would clip anyway.
 
 ### Wordmark
 
@@ -114,7 +113,7 @@ Extends the existing `LinearGradient.brandGradient` (already used in `WelcomeVie
 | `WelcomeView` left column | `LogoLockup(.hero)` + version chip beneath | Standalone "iExtend 1.0" capsule (lines 52–66) |
 | `DiscoverView` header | `LogoLockup(.compact)` top-left | Nothing (new header strip) |
 | `PairView` header | `LogoLockup(.compact)` top-left of the two-column area | Nothing (new header strip) |
-| `PinEntryView` | (no own lockup — appears as the right column of `PairView` and inherits the parent's header) | — |
+| `PinEntryView` | No own lockup — appears as the right column of `PairView` and inherits the parent's header. (No file change.) | — |
 | `FloatingToolbar` left edge | `LogoMark(size: 22, floats: false)` | Nothing (new toolbar element) |
 | `SettingsView` header | `LogoLockup(.compact)` | Nothing (new header element) |
 | `SettingsView` About row | `LogoMark(size: 64)` + version + build label | Nothing (new About row) |
@@ -122,7 +121,7 @@ Extends the existing `LinearGradient.brandGradient` (already used in `WelcomeVie
 
 ### App-icon render pipeline
 
-`scripts/app-icon-source.svg` is the canonical source for the springboard icon. The icon background is a 1024×1024 rounded square (radius 224, matching iOS 17 icon mask) with a dark indigo→purple linear gradient (`#1a1530 → #2a1a4a`). The fold mark is centered at ~62% width, drawn with the same panel coordinates as `LogoMark`, scaled and translated to fit.
+`scripts/app-icon-source.svg` is the canonical source for the springboard icon. The icon background is a 1024×1024 *full* square with a dark indigo→purple linear gradient (`#1a1530 → #2a1a4a`) — iOS 17 applies its own corner mask, so baking rounded corners into the PNG would double-round them. The fold mark is centered at ~62% width, drawn with the same panel coordinates as `LogoMark`, scaled and translated to fit.
 
 `scripts/generate-app-icon.sh` resolves its own location (via `dirname "$0"`) so it works from any CWD, then calls `rsvg-convert -w 1024 -h 1024 <repo>/scripts/app-icon-source.svg -o <repo>/ipad/iExtend/Assets.xcassets/AppIcon.appiconset/icon-1024.png`. The script verifies `rsvg-convert` is on PATH and prints a one-line install hint (`apt install librsvg2-bin`) if not. Output PNG is committed to the repo — the script is run-once when the icon changes, not on every build.
 
