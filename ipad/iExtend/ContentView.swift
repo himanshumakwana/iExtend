@@ -65,6 +65,10 @@ public struct ContentView: View {
     private func pairingView(for progress: PairingProgress) -> some View {
         switch progress.step {
         case .browsingMDNS, .discoveredHost:
+            // mDNS auto-discovery isn't wired yet, so the peer list will
+            // stay empty. The .withManualPairSection() extension renders
+            // a "Pair manually" form below the (currently empty) list —
+            // that's the actual working pair path.
             DiscoverView(
                 peers: $discoveredPeers,
                 isScanning: $isScanning,
@@ -73,6 +77,7 @@ public struct ContentView: View {
                 onManualIP: handleManualIP,
                 onRescan: handleRescan
             )
+            .withManualPairSection()
 
         case .enteringPin, .spake2Handshake, .exchangingCert:
             if let peer = selectedPeer {
@@ -97,9 +102,14 @@ public struct ContentView: View {
         isScanning = true
         Task {
             await sessionViewModel.session.startBrowsing()
-            // Simulate mDNS results for Plan 6 stub
+            // mDNS browsing isn't actually wired yet (Plan 6 stub left a
+            // hardcoded peer list as a UI demo). Real auto-discovery comes
+            // when a future iteration wires NWBrowser. Until then, the
+            // user pairs via the "Pair manually" card we render below the
+            // list — show no peers + an explicit empty state so it's
+            // obvious the user should scroll to that form.
             await MainActor.run {
-                discoveredPeers = DiscoveredPeer.stubList
+                discoveredPeers = []
                 isScanning = false
             }
         }

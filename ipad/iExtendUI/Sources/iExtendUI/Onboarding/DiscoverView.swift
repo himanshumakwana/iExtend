@@ -149,22 +149,35 @@ public struct DiscoverView: View {
     // MARK: Empty state
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             if isScanning {
                 ProgressView()
                     .progressViewStyle(.circular)
                     .tint(t.accent)
+                Text("Searching on \(networkName)…")
+                    .font(.body(14))
+                    .foregroundStyle(t.ink2)
             } else {
-                Image(systemName: "wifi.slash")
-                    .font(.system(size: 32))
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 28))
                     .foregroundStyle(t.ink3)
+                Text("Auto-discovery (mDNS) isn't wired up yet.")
+                    .font(.body(14, weight: .semibold))
+                    .foregroundStyle(t.ink)
+                Text("Scroll down and use **Pair manually** to enter your laptop's IP, port, and PIN.")
+                    .font(.body(12))
+                    .foregroundStyle(t.ink2)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(t.accent)
+                    .padding(.top, 4)
             }
-            Text(isScanning ? "Searching on \(networkName)…" : "No devices found")
-                .font(.body(14))
-                .foregroundStyle(t.ink2)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        .padding(.vertical, 32)
+        .padding(.horizontal, 16)
     }
 }
 
