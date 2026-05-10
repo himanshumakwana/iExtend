@@ -48,7 +48,10 @@ public struct WelcomeView: View {
 
     private var leftColumn: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Version badge
+            // Brand lockup (hero size, floating)
+            LogoLockup(.hero)
+
+            // Version chip directly underneath
             HStack(spacing: 8) {
                 Circle()
                     .fill(t.accent)
@@ -64,6 +67,7 @@ public struct WelcomeView: View {
                     .fill(cs == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.04))
                     .overlay(Capsule().strokeBorder(t.sep, lineWidth: 1))
             )
+            .padding(.top, 12)
 
             // Headline
             VStack(alignment: .leading, spacing: 0) {
