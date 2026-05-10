@@ -86,8 +86,16 @@ fn openh264_encode_decode_roundtrip_psnr_above_35db() {
 
     // Hex-dump the first 32 bytes so a regression in encoder behavior
     // (e.g. losing the SPS/PPS prefix) shows up as a diff in test output.
-    let preview: String = slice.data.iter().take(32).map(|b| format!("{b:02x}")).collect();
-    eprintln!("encoded preview ({} bytes total): {preview}", slice.data.len());
+    let preview: String = slice
+        .data
+        .iter()
+        .take(32)
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    eprintln!(
+        "encoded preview ({} bytes total): {preview}",
+        slice.data.len()
+    );
 
     let mut dec = Decoder::with_api_config(OpenH264API::from_source(), DecoderConfig::new())
         .expect("decoder init");
