@@ -98,7 +98,7 @@ public struct SettingsView: View {
         case .performance:
             PlaceholderPane(title: "Performance", message: "Bitrate, codec, and frame pacing settings — Plan 8.")
         case .general:
-            PlaceholderPane(title: "General", message: "App version, feedback, and reset options.")
+            GeneralPane()
         case .diagnostics:
             PlaceholderPane(title: "Diagnostics", message: "Log viewer, packet inspector, and DTLS trace — Plan 9.")
         }
@@ -284,6 +284,53 @@ public struct DisplayPane: View {
                     SettingsRow(title: "HDR") {
                         Toggle("", isOn: $hdr).labelsHidden().tint(t.green)
                     }
+                }
+            }
+            .padding(.bottom, 40)
+        }
+        .background(t.bg.ignoresSafeArea())
+        .navigationBarHidden(true)
+    }
+}
+
+// MARK: - GeneralPane
+
+private struct GeneralPane: View {
+    @Environment(\.theme) private var t
+
+    private var versionString: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let v = info["CFBundleShortVersionString"] as? String ?? "0.0"
+        let b = info["CFBundleVersion"] as? String ?? "0"
+        return "Version \(v) (\(b))"
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("General")
+                    .font(.display(28, weight: .bold))
+                    .foregroundStyle(t.ink)
+                    .kerning(-0.02 * 28)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+
+                // About row
+                SettingsListGroup(header: "About") {
+                    HStack(spacing: 16) {
+                        LogoMark(size: 64, floats: true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("iExtend")
+                                .font(.body(17, weight: .semibold))
+                                .foregroundStyle(t.ink)
+                            Text(versionString)
+                                .font(.body(13))
+                                .foregroundStyle(t.ink2)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
                 }
             }
             .padding(.bottom, 40)
