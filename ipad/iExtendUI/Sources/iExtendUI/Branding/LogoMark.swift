@@ -24,7 +24,7 @@ public struct LogoMark: View {
                 ambientGlow
                 panelsLayer
                     .shadow(
-                        color: Color.black.opacity(cs == .dark ? 0.35 : 0.21),
+                        color: Color.black.opacity(cs == .dark ? 0.55 : 0.33),
                         radius: 12,
                         x: 0,
                         y: 8

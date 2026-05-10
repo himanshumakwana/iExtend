@@ -24,7 +24,7 @@ Crease lines drawn between panels at 0.6pt, white at 50–70% opacity, sell the 
 
 ### Floating effect
 
-- **Floor shadow:** SwiftUI `.shadow(...)` modifier on the panels — 12pt blur radius, 8pt y-offset, black at 35% opacity in dark mode and 21% in light. (We initially scoped a separately-painted blurred ellipse but settled on the `.shadow` modifier — the panel geometry is irregular enough that a shape-conformant shadow reads as more believable than a centered ellipse, and it's one line vs. fifteen.)
+- **Floor shadow:** SwiftUI `.shadow(...)` modifier on the panels — 12pt blur radius, 8pt y-offset, black at 55% opacity in dark mode and 33% in light. (We initially scoped a separately-painted blurred ellipse but settled on the `.shadow` modifier — the panel geometry is irregular enough that a shape-conformant shadow reads as more believable than a centered ellipse, and it's one line vs. fifteen.)
 - **Ambient glow:** radial gradient (`#5e5ce6` 60% → 0%) sized roughly `size × 0.625` tall behind the panels, with an 8pt blur. Glow opacity is 0.6 in dark mode, 0.3 in light.
 - The icon SVG paints the halo separately (since rsvg-convert can't trace a SwiftUI `.shadow` from the panel paths) using a blurred indigo ellipse — but it omits the floor shadow, which iOS's icon mask would clip anyway.
 
