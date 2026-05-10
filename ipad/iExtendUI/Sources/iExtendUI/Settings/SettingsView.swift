@@ -34,12 +34,16 @@ public struct SettingsView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
+            LogoLockup(.compact)
+                .padding(.horizontal, 22)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+
             Text("Settings")
                 .font(.display(28, weight: .bold))
                 .foregroundStyle(t.ink)
                 .kerning(-0.02 * 28)
                 .padding(.horizontal, 22)
-                .padding(.top, 8)
                 .padding(.bottom, 12)
 
             // Search bar
