@@ -6,6 +6,7 @@
 pub mod grpc_server;
 pub mod keystore;
 pub mod pair_listener;
+pub mod screen_share;
 pub mod session;
 pub mod signaling;
 pub mod usb_listener;

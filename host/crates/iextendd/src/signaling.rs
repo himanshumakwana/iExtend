@@ -39,6 +39,7 @@
 #![allow(dead_code)]
 
 use crate::grpc_server::DaemonState;
+use crate::screen_share::ScreenShare;
 use anyhow::Result;
 use ix_rtc::rtc_peer::RtcPeer;
 use serde::{Deserialize, Serialize};
@@ -79,8 +80,13 @@ pub struct SignalingChannel {
 }
 
 /// Run the signaling listener until cancelled. Each accepted connection
-/// spawns a `connection_loop` task that owns one socket end-to-end.
-pub async fn run(state: Arc<RwLock<DaemonState>>, cancel: CancellationToken) -> Result<()> {
+/// spawns a `connection_loop` task that owns one socket end-to-end and
+/// registers its peer with the shared `ScreenShare` pipeline.
+pub async fn run(
+    state: Arc<RwLock<DaemonState>>,
+    cancel: CancellationToken,
+    screen_share: ScreenShare,
+) -> Result<()> {
     let port = DEFAULT_SIGNALING_PORT;
     let listener = match TcpListener::bind(("0.0.0.0", port)).await {
         Ok(l) => l,
@@ -104,8 +110,9 @@ pub async fn run(state: Arc<RwLock<DaemonState>>, cancel: CancellationToken) -> 
                         info!(?addr, "signaling: client connected");
                         let state = state.clone();
                         let cancel = cancel.clone();
+                        let ss = screen_share.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = connection_loop(stream, addr, state, cancel).await {
+                            if let Err(e) = connection_loop(stream, addr, state, cancel, ss).await {
                                 warn!(?addr, err = %e, "signaling connection error");
                             }
                         });
@@ -134,6 +141,7 @@ pub async fn connection_loop(
     addr: SocketAddr,
     _state: Arc<RwLock<DaemonState>>,
     cancel: CancellationToken,
+    screen_share: ScreenShare,
 ) -> Result<()> {
     let (mut reader, mut writer) = stream.into_split();
 
@@ -147,6 +155,10 @@ pub async fn connection_loop(
             return Err(anyhow::anyhow!("RtcPeer::new: {e}"));
         }
     };
+
+    // Register with the broadcast pipeline. Encoded frames now fan out
+    // to this peer's outbound video track.
+    screen_share.add_peer(peer.clone()).await;
 
     // Outbound queue — webrtc-rs's ICE candidate callback runs on its own
     // task pool and can't write directly to the socket, so it pushes here
@@ -175,20 +187,47 @@ pub async fn connection_loop(
 
     info!(?addr, "signaling: RtcPeer initialised, awaiting offer");
 
+    let loop_result = signal_loop(
+        &mut reader,
+        &mut writer,
+        peer.clone(),
+        &mut out_rx,
+        &cancel,
+        &addr,
+    )
+    .await;
+
+    // Always deregister so the broadcast pipeline doesn't keep a stale
+    // peer reference pointing at a dropped TCP socket.
+    screen_share.remove_peer(&peer).await;
+
+    loop_result
+}
+
+/// Inner loop extracted so `connection_loop` can deregister the peer in
+/// a single place after the loop returns regardless of which arm exited.
+async fn signal_loop(
+    reader: &mut tokio::net::tcp::OwnedReadHalf,
+    writer: &mut tokio::net::tcp::OwnedWriteHalf,
+    peer: Arc<RtcPeer>,
+    out_rx: &mut mpsc::UnboundedReceiver<SignalMsg>,
+    cancel: &CancellationToken,
+    addr: &SocketAddr,
+) -> Result<()> {
     loop {
         tokio::select! {
             _ = cancel.cancelled() => {
-                let _ = write_msg(&mut writer, &SignalMsg::Bye).await;
+                let _ = write_msg(writer, &SignalMsg::Bye).await;
                 return Ok(());
             }
-            msg = read_msg(&mut reader) => {
+            msg = read_msg(reader) => {
                 match msg {
                     Ok(SignalMsg::Offer { sdp }) => {
                         info!(?addr, sdp_len = sdp.len(), "signaling: received offer");
                         match peer.apply_offer_create_answer(&sdp).await {
                             Ok(answer_sdp) => {
                                 let answer = SignalMsg::Answer { sdp: answer_sdp };
-                                if let Err(e) = write_msg(&mut writer, &answer).await {
+                                if let Err(e) = write_msg(writer, &answer).await {
                                     warn!(?addr, err = %e, "signaling: write answer failed");
                                     return Err(e);
                                 }
@@ -201,9 +240,6 @@ pub async fn connection_loop(
                         }
                     }
                     Ok(SignalMsg::Answer { sdp }) => {
-                        // We're the answerer in the iPad-initiated flow; an
-                        // unexpected Answer here means the peer mixed up roles.
-                        // Log + ignore rather than crashing the channel.
                         info!(?addr, sdp_len = sdp.len(), "signaling: ignoring unexpected Answer");
                     }
                     Ok(SignalMsg::Ice { candidate }) => {
@@ -222,7 +258,7 @@ pub async fn connection_loop(
                 }
             }
             Some(out) = out_rx.recv() => {
-                if let Err(e) = write_msg(&mut writer, &out).await {
+                if let Err(e) = write_msg(writer, &out).await {
                     warn!(?addr, err = %e, "signaling: write outbound failed");
                     return Err(e);
                 }

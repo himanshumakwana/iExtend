@@ -2,6 +2,7 @@ mod cursor_protocol;
 mod grpc_server;
 mod keystore;
 mod pair_listener;
+mod screen_share;
 mod session;
 mod signaling;
 mod transport;
@@ -40,13 +41,20 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Screen-share pipeline (capture → encode → broadcast). Idles
+    // gracefully on platforms without a wired capture path (Linux for
+    // now). Returns a clonable handle that the signaling module
+    // registers active peers with.
+    let screen_share = screen_share::ScreenShare::start(cancel.clone());
+
     // WebRTC signaling listener — accepts the iPad's SDP/ICE bidi stream
     // after pair completes. Idles when port 7783 is unavailable so the rest
     // of the daemon still runs.
     let sig_state = state.clone();
     let sig_cancel = cancel.clone();
+    let sig_screen_share = screen_share.clone();
     tokio::spawn(async move {
-        if let Err(e) = signaling::run(sig_state, sig_cancel).await {
+        if let Err(e) = signaling::run(sig_state, sig_cancel, sig_screen_share).await {
             error!(err = %e, "signaling exited with error");
         }
     });

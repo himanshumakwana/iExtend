@@ -22,14 +22,22 @@ async fn signaling_offer_round_trips_through_real_rtc_peer() {
     let cancel = CancellationToken::new();
     let state = Arc::new(RwLock::new(iextendd::DaemonState::new()));
 
-    // Spawn the real daemon-side connection_loop.
+    // Spawn the real daemon-side connection_loop. ScreenShare's worker
+    // idles on Linux (no DXGI capture) so the test doesn't pump frames;
+    // signaling SDP/ICE exchange happens regardless.
     let cancel_for_loop = cancel.clone();
     let state_for_loop = state.clone();
+    let screen_share = iextendd::screen_share::ScreenShare::start(cancel.clone());
     tokio::spawn(async move {
         if let Ok((stream, addr)) = listener.accept().await {
-            let _ =
-                iextendd::signaling::connection_loop(stream, addr, state_for_loop, cancel_for_loop)
-                    .await;
+            let _ = iextendd::signaling::connection_loop(
+                stream,
+                addr,
+                state_for_loop,
+                cancel_for_loop,
+                screen_share,
+            )
+            .await;
         }
     });
 
