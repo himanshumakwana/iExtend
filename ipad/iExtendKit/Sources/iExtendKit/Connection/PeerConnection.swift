@@ -38,6 +38,16 @@ public protocol PeerConnectionDelegate: AnyObject, Sendable {
     func peerConnectionDidOpenControlChannel() async
     func peerConnectionDidReceiveControlMessage(_ data: Data) async
     func peerConnectionFailed(_ error: PeerConnectionError) async
+
+    /// Called whenever WebRTC's local ICE agent gathers a new candidate.
+    /// The orchestrator forwards it over the signaling channel so the
+    /// remote peer can call `addICECandidate` with the same string.
+    func peerConnectionDidGenerateLocalCandidate(_ candidate: String, sdpMid: String?, sdpMLineIndex: Int32) async
+
+    /// Called when the daemon's outbound video track arrives. The
+    /// orchestrator attaches an `RTCMTLVideoView` (or any renderer) via
+    /// `PeerConnection.attachVideoRenderer(_:)` to start drawing frames.
+    func peerConnectionDidReceiveRemoteVideoTrack() async
 }
 
 // MARK: - RTCPeerConnectionState shim (stub when WebRTC not importable)
@@ -51,6 +61,8 @@ public typealias RTCConfiguration = AnyObject
 public typealias RTCDataChannel = AnyObject
 public typealias RTCSessionDescription = AnyObject
 public typealias RTCIceCandidate = AnyObject
+public typealias RTCVideoRenderer = AnyObject
+public typealias RTCVideoTrack = AnyObject
 #endif
 
 // MARK: - PeerConnection actor
@@ -67,6 +79,12 @@ public actor PeerConnection {
     private var pc: RTCPeerConnection?
     private var controlChannel: RTCDataChannel?
     private var factory: RTCPeerConnectionFactory?
+    /// Holds the most recently delivered remote video track so an
+    /// `RTCMTLVideoView` (or any renderer) can be attached after the fact.
+    /// SwiftUI views can't always be ready at the instant the track arrives,
+    /// so we stash + replay rather than racing.
+    private var remoteVideoTrack: RTCVideoTrack?
+    private var pendingRenderers: [RTCVideoRenderer] = []
 #endif
 
     private weak var delegate: (any PeerConnectionDelegate)?
@@ -207,8 +225,32 @@ public actor PeerConnection {
         pc = nil
         controlChannel = nil
         factory = nil
+        remoteVideoTrack = nil
+        pendingRenderers.removeAll()
 #endif
         connectionState = .closed
+    }
+
+    /// Attach a renderer (e.g. `RTCMTLVideoView`) to the remote video track.
+    /// If the track hasn't arrived yet, the renderer is queued and attached
+    /// once `peerConnectionDidReceiveRemoteVideoTrack` fires.
+    public func attachVideoRenderer(_ renderer: RTCVideoRenderer) {
+#if canImport(WebRTC)
+        if let track = remoteVideoTrack {
+            track.add(renderer)
+        } else {
+            pendingRenderers.append(renderer)
+        }
+#endif
+    }
+
+    /// Detach a previously-attached renderer. Safe to call even if the
+    /// renderer was never attached or the track is gone.
+    public func detachVideoRenderer(_ renderer: RTCVideoRenderer) {
+#if canImport(WebRTC)
+        remoteVideoTrack?.remove(renderer)
+        pendingRenderers.removeAll { $0 === renderer }
+#endif
     }
 
     // MARK: Internal callbacks (called from PeerConnectionBridge)
@@ -220,6 +262,24 @@ public actor PeerConnection {
             await delegate?.peerConnectionFailed(.iceFailed)
         }
     }
+
+    func _onLocalCandidate(_ candidate: String, sdpMid: String?, sdpMLineIndex: Int32) async {
+        await delegate?.peerConnectionDidGenerateLocalCandidate(
+            candidate, sdpMid: sdpMid, sdpMLineIndex: sdpMLineIndex
+        )
+    }
+
+#if canImport(WebRTC)
+    func _onRemoteVideoTrack(_ track: RTCVideoTrack) async {
+        remoteVideoTrack = track
+        // Drain any renderers that registered before the track arrived.
+        for renderer in pendingRenderers {
+            track.add(renderer)
+        }
+        pendingRenderers.removeAll()
+        await delegate?.peerConnectionDidReceiveRemoteVideoTrack()
+    }
+#endif
 
     func _onControlMessage(_ data: Data) async {
         await delegate?.peerConnectionDidReceiveControlMessage(data)
@@ -265,9 +325,14 @@ private final class PeerConnectionBridge: NSObject, RTCPeerConnectionDelegate, R
 
     func peerConnection(_ peerConnection: RTCPeerConnection,
                         didGenerate candidate: RTCIceCandidate) {
-        // In production, signal this candidate to the host via Signaling.swift.
-        // For Plan 6 (LAN-only), continual gathering collects all candidates and
-        // the offer SDP already has host candidates embedded.
+        // Forward to the orchestrator so it can push the candidate to the
+        // host over the signaling channel. The candidate.sdp string is the
+        // "candidate:..." token line; sdpMid + sdpMLineIndex are needed by
+        // the remote peer to attach it to the right m= section.
+        let sdp = candidate.sdp
+        let mid = candidate.sdpMid
+        let mLine = candidate.sdpMLineIndex
+        Task { await parent._onLocalCandidate(sdp, sdpMid: mid, sdpMLineIndex: mLine) }
     }
 
     func peerConnection(_ peerConnection: RTCPeerConnection,
@@ -282,6 +347,27 @@ private final class PeerConnectionBridge: NSObject, RTCPeerConnectionDelegate, R
     func peerConnection(_ peerConnection: RTCPeerConnection,
                         didChange state: RTCPeerConnectionState) {
         Task { await parent._onStateChange(state) }
+    }
+
+    /// Modern Unified-Plan equivalent of didAdd/stream — fires when an
+    /// RTCRtpReceiver starts receiving on a transceiver. We use this to
+    /// pick up the daemon's video track (the daemon adds it to the
+    /// peer connection before sending the answer SDP).
+    func peerConnection(_ peerConnection: RTCPeerConnection,
+                        didStartReceivingOn transceiver: RTCRtpTransceiver) {
+        if let track = transceiver.receiver.track as? RTCVideoTrack {
+            Task { await parent._onRemoteVideoTrack(track) }
+        }
+    }
+
+    /// Plan-B fallback. Some webrtc-rs versions still trigger didAdd/stream
+    /// instead of didStartReceivingOn. We listen on both to be safe.
+    func peerConnection(_ peerConnection: RTCPeerConnection,
+                        didAdd rtpReceiver: RTCRtpReceiver,
+                        streams mediaStreams: [RTCMediaStream]) {
+        if let track = rtpReceiver.track as? RTCVideoTrack {
+            Task { await parent._onRemoteVideoTrack(track) }
+        }
     }
 
     // MARK: RTCDataChannelDelegate
