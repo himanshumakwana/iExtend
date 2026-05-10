@@ -2101,6 +2101,7 @@ dependencies = [
  "eframe",
  "egui",
  "hyper-util",
+ "if-addrs",
  "ix-transport",
  "prost",
  "protoc-bin-vendored",

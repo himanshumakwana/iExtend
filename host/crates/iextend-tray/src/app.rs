@@ -266,7 +266,65 @@ impl TrayApp {
                     0.0
                 };
                 ui.add(egui::ProgressBar::new(pct).text(format!("{}s remaining", ps.seconds_left)));
-                ui.add_space(8.0);
+                ui.add_space(12.0);
+
+                // Connection info — what the iPad app's "Pair manually" form
+                // wants. Port is the ephemeral one the daemon's listener
+                // bound; host IPs are detected from local network interfaces
+                // so the user doesn't need to run ipconfig separately.
+                ui.separator();
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new("On your iPad, enter:").strong());
+                ui.add_space(4.0);
+
+                egui::Grid::new("pair_conn_info")
+                    .num_columns(2)
+                    .spacing([10.0, 4.0])
+                    .show(ui, |ui| {
+                        ui.label("Port:");
+                        let port_text = ps.port.to_string();
+                        if ui
+                            .add(
+                                egui::Label::new(
+                                    egui::RichText::new(&port_text).monospace().strong(),
+                                )
+                                .sense(egui::Sense::click()),
+                            )
+                            .on_hover_text("Click to copy")
+                            .clicked()
+                        {
+                            ui.ctx().copy_text(port_text.clone());
+                        }
+                        ui.end_row();
+
+                        ui.label("Host IP:");
+                        let ips = local_ipv4_addresses();
+                        if ips.is_empty() {
+                            ui.label(
+                                egui::RichText::new("(detecting…)")
+                                    .italics()
+                                    .color(egui::Color32::from_gray(150)),
+                            );
+                        } else {
+                            ui.vertical(|ui| {
+                                for ip in &ips {
+                                    if ui
+                                        .add(
+                                            egui::Label::new(egui::RichText::new(ip).monospace())
+                                                .sense(egui::Sense::click()),
+                                        )
+                                        .on_hover_text("Click to copy")
+                                        .clicked()
+                                    {
+                                        ui.ctx().copy_text(ip.clone());
+                                    }
+                                }
+                            });
+                        }
+                        ui.end_row();
+                    });
+
+                ui.add_space(12.0);
                 if ui.button("Cancel").clicked() {
                     let ep = self.endpoint.clone();
                     let _ = self.rt.block_on(client::cancel_pairing(&ep));
@@ -621,4 +679,34 @@ fn relative_time(unix_ts: i64) -> String {
     } else {
         format!("{}d ago", diff / 86400)
     }
+}
+
+/// Best-effort enumeration of the host's non-loopback IPv4 addresses.
+///
+/// Used by the Pair tab so the user can see which address to type into
+/// the iPad's manual-pair form. Loopback (127.0.0.0/8) and link-local
+/// (169.254.0.0/16) addresses are filtered — those won't reach the iPad
+/// over Wi-Fi. Returns an empty vec on enumeration failure rather than
+/// panicking; the UI then shows a "(detecting…)" placeholder.
+fn local_ipv4_addresses() -> Vec<String> {
+    let Ok(ifaces) = if_addrs::get_if_addrs() else {
+        return Vec::new();
+    };
+    let mut out: Vec<String> = ifaces
+        .into_iter()
+        .filter_map(|iface| match iface.addr {
+            if_addrs::IfAddr::V4(v4) => {
+                let ip = v4.ip;
+                if ip.is_loopback() || ip.is_link_local() {
+                    None
+                } else {
+                    Some(ip.to_string())
+                }
+            }
+            if_addrs::IfAddr::V6(_) => None,
+        })
+        .collect();
+    out.sort();
+    out.dedup();
+    out
 }

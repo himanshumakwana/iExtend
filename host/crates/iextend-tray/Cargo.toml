@@ -28,6 +28,7 @@ tonic              = { workspace = true }
 prost              = { workspace = true }
 tower              = { workspace = true }
 hyper-util         = { version = "0.1", features = ["tokio"] }
+if-addrs           = "0.13"
 ix-transport       = { path = "../ix-transport" }
 
 [build-dependencies]
