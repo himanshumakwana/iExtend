@@ -20,9 +20,37 @@ public struct LogoMark: View {
 
     public var body: some View {
         ZStack {
-            panelsLayer
+            if floats {
+                ambientGlow
+                panelsLayer
+                    .shadow(
+                        color: Color.black.opacity(cs == .dark ? 0.35 : 0.21),
+                        radius: 12,
+                        x: 0,
+                        y: 8
+                    )
+            } else {
+                panelsLayer
+            }
         }
         .frame(width: size, height: size)
+    }
+
+    // Indigo halo behind the panels. Sized roughly 80×50pt at the canonical
+    // 160pt mark size; scales with `size`.
+    private var ambientGlow: some View {
+        let glowOpacity = cs == .dark ? 0.6 : 0.3
+        return RadialGradient(
+            colors: [
+                Color(hex: "#5e5ce6").opacity(glowOpacity),
+                Color(hex: "#5e5ce6").opacity(0)
+            ],
+            center: .center,
+            startRadius: 0,
+            endRadius: size * 0.5
+        )
+        .frame(width: size * 1.0, height: size * 0.625)
+        .blur(radius: 8)
     }
 
     // MARK: Panels + sheen + creases (drawn in this z-order)
@@ -71,13 +99,26 @@ public struct LogoMark: View {
     }
 }
 
-#Preview {
-    VStack(spacing: 32) {
-        LogoMark(size: 96, floats: false)
-        LogoMark(size: 192, floats: false)
+#Preview("Dark — floating vs flat") {
+    HStack(spacing: 32) {
+        VStack(spacing: 8) {
+            LogoMark(size: 128, floats: true)
+            Text("floats: true").font(.caption).foregroundStyle(.white)
+        }
+        VStack(spacing: 8) {
+            LogoMark(size: 128, floats: false)
+            Text("floats: false").font(.caption).foregroundStyle(.white)
+        }
     }
     .padding(40)
     .background(Color(hex: "#0f0f14"))
     .preferredColorScheme(.dark)
+}
+
+#Preview("Light — floating") {
+    LogoMark(size: 128, floats: true)
+        .padding(40)
+        .background(Color(hex: "#f2f2f7"))
+        .preferredColorScheme(.light)
 }
 #endif
