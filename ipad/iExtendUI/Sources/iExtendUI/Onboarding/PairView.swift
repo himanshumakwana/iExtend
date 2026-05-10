@@ -41,6 +41,14 @@ public struct PairView: View {
             VStack(spacing: 0) {
                 Color.clear.frame(height: 40) // status bar
 
+                // Brand header strip
+                HStack {
+                    LogoLockup(.compact)
+                    Spacer()
+                }
+                .padding(.horizontal, 36)
+                .padding(.bottom, 8)
+
                 HStack(spacing: 22) {
                     // ── Left: QR card ──────────────────────────────────
                     qrCard
