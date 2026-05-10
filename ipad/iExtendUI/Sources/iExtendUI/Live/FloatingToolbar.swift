@@ -3,7 +3,12 @@
 // Positions: top / bottom (horizontally centered) or left (vertically centered).
 // Densities: compact / regular / comfy.
 // The toolbar can be dragged to any position along its axis.
+//
+// Gated on UIKit because we depend on `LogoMark` which is itself UIKit-gated
+// (it uses iOS-only SwiftUI shapes). Without this gate, `swift test` on the
+// macOS host fails to find LogoMark in scope.
 
+#if canImport(UIKit)
 import SwiftUI
 
 public struct FloatingToolbar: View {
@@ -269,3 +274,4 @@ private struct HStack_or_VStack<Content: View>: View {
     }
     .preferredColorScheme(.dark)
 }
+#endif
