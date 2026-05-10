@@ -18,6 +18,14 @@ on:
     - cron: '17 7 * * *'   # 07:17 UTC — off-peak for free runners
   workflow_dispatch:
 
+# Default GITHUB_TOKEN permissions for scheduled workflows are read-only.
+# This workflow needs:
+#   contents: write       → push the updated .perf-history.json back to main
+#   pull-requests: write  → post the perf-delta comment on the most recent PR
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   long-soak-synthetic:
     name: 30-min synthetic latency soak
