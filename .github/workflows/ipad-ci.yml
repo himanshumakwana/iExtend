@@ -12,6 +12,9 @@ on:
     paths: ['ipad/**', '.github/workflows/ipad-ci.yml']
   pull_request:
     paths: ['ipad/**', '.github/workflows/ipad-ci.yml']
+  # Manual trigger from `gh workflow run ipad-ci.yml` or the Actions tab.
+  # Useful for re-cutting an unsigned IPA without making a no-op commit.
+  workflow_dispatch:
 
 # Limit concurrent runs per branch — newer pushes cancel older ones.
 concurrency:
