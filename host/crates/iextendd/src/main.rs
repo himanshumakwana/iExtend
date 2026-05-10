@@ -3,6 +3,7 @@ mod grpc_server;
 mod keystore;
 mod pair_listener;
 mod session;
+mod signaling;
 mod transport;
 mod usb_listener;
 #[cfg(windows)]
@@ -36,6 +37,17 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         if let Err(e) = usb_listener::run(usb_state, usb_cancel).await {
             error!(err = %e, "usb_listener exited with error");
+        }
+    });
+
+    // WebRTC signaling listener — accepts the iPad's SDP/ICE bidi stream
+    // after pair completes. Idles when port 7783 is unavailable so the rest
+    // of the daemon still runs.
+    let sig_state = state.clone();
+    let sig_cancel = cancel.clone();
+    tokio::spawn(async move {
+        if let Err(e) = signaling::run(sig_state, sig_cancel).await {
+            error!(err = %e, "signaling exited with error");
         }
     });
 

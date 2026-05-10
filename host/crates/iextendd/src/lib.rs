@@ -7,6 +7,7 @@ pub mod grpc_server;
 pub mod keystore;
 pub mod pair_listener;
 pub mod session;
+pub mod signaling;
 pub mod usb_listener;
 
 // Re-export DaemonState for tests / external callers.

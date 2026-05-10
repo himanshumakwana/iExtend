@@ -2138,6 +2138,7 @@ dependencies = [
  "rand_core 0.6.4",
  "rusqlite",
  "secret-service",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",
