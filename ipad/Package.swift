@@ -62,6 +62,11 @@ let package = Package(
             path: "iExtendInput/Tests/iExtendInputTests",
             resources: [.copy("Fixtures")]
         ),
+        .testTarget(
+            name: "iExtendUITests",
+            dependencies: ["iExtendUI"],
+            path: "iExtendUI/Tests/iExtendUITests"
+        ),
     ]
 )
 
