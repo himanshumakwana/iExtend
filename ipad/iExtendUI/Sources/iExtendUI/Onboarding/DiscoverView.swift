@@ -48,6 +48,14 @@ public struct DiscoverView: View {
                 // Status bar spacing
                 Color.clear.frame(height: 38)
 
+                // Brand header strip
+                HStack {
+                    LogoLockup(.compact)
+                    Spacer()
+                }
+                .padding(.horizontal, 36)
+                .padding(.bottom, 8)
+
                 VStack(alignment: .leading, spacing: 14) {
                     // Header row
                     HStack(alignment: .lastTextBaseline) {
