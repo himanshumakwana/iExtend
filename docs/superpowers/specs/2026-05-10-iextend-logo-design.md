@@ -113,8 +113,8 @@ Extends the existing `LinearGradient.brandGradient` (already used in `WelcomeVie
 |---|---|---|
 | `WelcomeView` left column | `LogoLockup(.hero)` + version chip beneath | Standalone "iExtend 1.0" capsule (lines 52–66) |
 | `DiscoverView` header | `LogoLockup(.compact)` top-left | Nothing (new header strip) |
-| `PairView` header | `LogoLockup(.compact)` top-left | Nothing (new header strip) |
-| `PinEntryView` header | `LogoLockup(.compact)` top-left | Nothing (new header strip) |
+| `PairView` header | `LogoLockup(.compact)` top-left of the two-column area | Nothing (new header strip) |
+| `PinEntryView` | (no own lockup — appears as the right column of `PairView` and inherits the parent's header) | — |
 | `FloatingToolbar` left edge | `LogoMark(size: 22, floats: false)` | Nothing (new toolbar element) |
 | `SettingsView` header | `LogoLockup(.compact)` | Nothing (new header element) |
 | `SettingsView` About row | `LogoMark(size: 64)` + version + build label | Nothing (new About row) |
@@ -169,8 +169,8 @@ The mark's panel gradients are *fixed* — they don't recolor in light vs dark m
 
 ## Testing
 
-- **Visual snapshot test (unit):** Render `LogoMark(size: 256, floats: true)` in light and dark color schemes, snapshot to PNG, compare against committed reference. Catches accidental geometry / color regressions.
-- **Manual visual check:** Open each modified screen (`WelcomeView`, `DiscoverView`, `PairView`, `PinEntryView`, `LiveView`, `SettingsView`) in SwiftUI Preview. The brainstorm visuals at `.superpowers/brainstorm/.../origami-variants.html` (variant L3) are the reference for "what it should look like".
+- **Data-level unit tests (`iExtendUITests`):** assert `LogoGeometry`'s panel coordinates, crease endpoints, and `BrandLockup` size constants. Catches geometry/sizing regressions cross-platform — runs on Linux and macOS via `swift test`. SwiftUI snapshot testing (PNG comparison) is *not* added in this spec; it would require pulling in `pointfreeco/swift-snapshot-testing` as a new SPM dependency, which is heavier than the regression risk warrants here. If visual drift becomes a real problem later, layering snapshot tests on top is straightforward.
+- **Manual visual check:** Open each modified screen (`WelcomeView`, `DiscoverView`, `PairView`, `LiveView`, `SettingsView`) in SwiftUI Preview. The brainstorm visuals at `.superpowers/brainstorm/.../origami-variants.html` (variant L3) are the reference for "what it should look like".
 - **Icon render verification:** After running `scripts/generate-app-icon.sh`, open `icon-1024.png` and compare against `app-icon-source.svg` rendered in a browser at 1024px. They should be visually identical.
 - **No automated test for the SVG → PNG pipeline.** Output is committed; if `rsvg-convert` produces a bad PNG, it's caught at the visual check step.
 
