@@ -99,6 +99,45 @@ impl X264Sw {
         // grey frames produce valid H.264 bitstreams for latency measurement.
         YUVBuffer::new(src.width as usize, src.height as usize)
     }
+
+    /// Encode a YUV420P buffer (CPU-resident) — bypasses `GpuFrame` for the
+    /// DXGI capture path which produces planar I420 directly.
+    ///
+    /// `yuv` layout: Y plane (`w * h` bytes), then U (`w/2 * h/2`), then V
+    /// (`w/2 * h/2`). This is the same layout `bgra_to_yuv420p` in
+    /// `ix-display-windows::dxgi_capture` produces.
+    ///
+    /// Width and height must be even — openh264's I420 input requires it.
+    /// We assert rather than silently ignoring odd inputs.
+    pub fn encode_yuv420(
+        &mut self,
+        yuv: Vec<u8>,
+        width: u32,
+        height: u32,
+        pts_us: u64,
+    ) -> Result<EncodedSlice, CodecError> {
+        let is_kf = self.should_keyframe();
+        let yuv_buf = YUVBuffer::from_vec(yuv, width as usize, height as usize);
+
+        let bs = self
+            .enc
+            .encode(&yuv_buf)
+            .map_err(|e| CodecError::EncodeFailed(format!("openh264 encode: {e}")))?;
+
+        let data = bs.to_vec();
+        let slice_idx = self.next_slice;
+
+        self.pending_keyframe = false;
+        self.frame_count = self.frame_count.wrapping_add(1);
+        self.next_slice = self.next_slice.wrapping_add(1);
+
+        Ok(EncodedSlice {
+            data,
+            is_keyframe: is_kf,
+            pts_us: pts_us as i64,
+            slice_index: slice_idx,
+        })
+    }
 }
 
 impl Encoder for X264Sw {
