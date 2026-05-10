@@ -106,12 +106,10 @@ fn init_duplication() -> Result<
         )
         .map_err(CaptureError::Init)?;
 
-        let device = device.ok_or_else(|| {
-            CaptureError::Init(windows::core::Error::from_win32())
-        })?;
-        let context = context.ok_or_else(|| {
-            CaptureError::Init(windows::core::Error::from_win32())
-        })?;
+        let device =
+            device.ok_or_else(|| CaptureError::Init(windows::core::Error::from_win32()))?;
+        let context =
+            context.ok_or_else(|| CaptureError::Init(windows::core::Error::from_win32()))?;
 
         // 2. Walk DXGI to find the first output (= primary monitor).
         let factory: IDXGIFactory1 = CreateDXGIFactory1().map_err(CaptureError::Init)?;
@@ -251,8 +249,7 @@ pub fn capture_loop(tx: mpsc::Sender<CapturedFrame>) -> Result<(), CaptureError>
         let mut frame_info: DXGI_OUTDUPL_FRAME_INFO = unsafe { std::mem::zeroed() };
         let mut resource: Option<IDXGIResource> = None;
 
-        let acquire_result =
-            unsafe { dup.AcquireNextFrame(100, &mut frame_info, &mut resource) };
+        let acquire_result = unsafe { dup.AcquireNextFrame(100, &mut frame_info, &mut resource) };
 
         match acquire_result {
             Ok(()) => {}
@@ -270,7 +267,9 @@ pub fn capture_loop(tx: mpsc::Sender<CapturedFrame>) -> Result<(), CaptureError>
         let resource = match resource {
             Some(r) => r,
             None => {
-                unsafe { let _ = dup.ReleaseFrame(); }
+                unsafe {
+                    let _ = dup.ReleaseFrame();
+                }
                 continue;
             }
         };
@@ -279,7 +278,9 @@ pub fn capture_loop(tx: mpsc::Sender<CapturedFrame>) -> Result<(), CaptureError>
             Ok(t) => t,
             Err(e) => {
                 warn!(err = %e, "could not cast resource to ID3D11Texture2D");
-                unsafe { let _ = dup.ReleaseFrame(); }
+                unsafe {
+                    let _ = dup.ReleaseFrame();
+                }
                 continue;
             }
         };
