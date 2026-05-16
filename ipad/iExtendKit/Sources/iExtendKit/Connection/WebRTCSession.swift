@@ -124,6 +124,10 @@ public final class WebRTCSession: ObservableObject {
 #endif
     }
 
+    fileprivate func onPeerFailed(_ reason: String) {
+        state = .failed(reason: reason)
+    }
+
     fileprivate func onLocalCandidate(_ candidate: String) async {
         do {
             try await signaling.send(.ice(candidate: candidate))
@@ -163,8 +167,9 @@ private final class SessionDelegateBridge: PeerConnectionDelegate, @unchecked Se
     func peerConnectionDidReceiveControlMessage(_ data: Data) async {}
 
     func peerConnectionFailed(_ error: PeerConnectionError) async {
+        let reason = "\(error)"
         await MainActor.run {
-            session?.state = .failed(reason: "\(error)")
+            session?.onPeerFailed(reason)
         }
     }
 
