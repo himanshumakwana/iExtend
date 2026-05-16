@@ -44,19 +44,29 @@ use std::ptr;
 use tracing::info;
 
 use windows::core::{Interface, PWSTR, VARIANT};
+use windows::Win32::Foundation::HMODULE;
+use windows::Win32::Graphics::Direct3D::{
+    D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_11_0,
+};
+use windows::Win32::Graphics::Direct3D11::{
+    D3D11CreateDevice, ID3D11Device, ID3D11Multithread, D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+    D3D11_SDK_VERSION,
+};
 use windows::Win32::Media::MediaFoundation::{
     eAVEncCommonRateControlMode_CBR, eAVEncH264VProfile_Base, CODECAPI_AVEncCommonMeanBitRate,
     CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncMPVDefaultBPictureCount,
-    CODECAPI_AVEncVideoForceKeyFrame, ICodecAPI, IMFActivate, IMFSample, IMFTransform,
-    MFCreateMediaType, MFCreateMemoryBuffer, MFCreateSample, MFMediaType_Video,
-    MFSampleExtension_CleanPoint, MFStartup, MFTEnumEx, MFT_FRIENDLY_NAME_Attribute,
-    MFVideoFormat_H264, MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFSTARTUP_LITE,
-    MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER,
-    MFT_ENUM_FLAG_SYNCMFT, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_START_OF_STREAM,
-    MFT_OUTPUT_DATA_BUFFER, MFT_OUTPUT_STREAM_INFO, MFT_OUTPUT_STREAM_PROVIDES_SAMPLES,
-    MFT_REGISTER_TYPE_INFO, MF_E_TRANSFORM_NEED_MORE_INPUT, MF_E_TRANSFORM_STREAM_CHANGE,
-    MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE,
-    MF_MT_MPEG2_PROFILE, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE, MF_VERSION,
+    CODECAPI_AVEncVideoForceKeyFrame, ICodecAPI, IMFActivate, IMFDXGIDeviceManager, IMFSample,
+    IMFTransform, MFCreateDXGIDeviceManager, MFCreateMediaType, MFCreateMemoryBuffer,
+    MFCreateSample, MFMediaType_Video, MFSampleExtension_CleanPoint, MFStartup, MFTEnumEx,
+    MFT_FRIENDLY_NAME_Attribute, MFVideoFormat_H264, MFVideoFormat_NV12,
+    MFVideoInterlace_Progressive, MFSTARTUP_LITE, MFT_CATEGORY_VIDEO_ENCODER,
+    MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
+    MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_START_OF_STREAM,
+    MFT_MESSAGE_SET_D3D_MANAGER, MFT_OUTPUT_DATA_BUFFER, MFT_OUTPUT_STREAM_INFO,
+    MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MFT_REGISTER_TYPE_INFO, MF_E_TRANSFORM_NEED_MORE_INPUT,
+    MF_E_TRANSFORM_STREAM_CHANGE, MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE,
+    MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE, MF_MT_PIXEL_ASPECT_RATIO,
+    MF_MT_SUBTYPE, MF_VERSION,
 };
 use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, COINIT_MULTITHREADED};
 
@@ -122,10 +132,26 @@ fn i420_to_nv12(yuv: &[u8], w: u32, h: u32, out: &mut Vec<u8>) {
     }
 }
 
+/// D3D11 device + DXGI device manager. Hardware H.264 MFTs require this:
+/// without an `IMFDXGIDeviceManager` set via `MFT_MESSAGE_SET_D3D_MANAGER`
+/// they refuse `ActivateObject` (D3DERR_INVALIDCALL, 0x8876086C) because
+/// they need GPU access during initialization.
+///
+/// Drop order matters — the device manager must outlive the transform; we
+/// achieve that by storing this struct AFTER the transform in `MftH264`
+/// (Rust drops fields in declaration order, so the transform is released
+/// first).
+struct D3DContext {
+    _device: ID3D11Device,
+    manager: IMFDXGIDeviceManager,
+}
+
 /// Hardware-accelerated H.264 encoder via Media Foundation.
 pub struct MftH264 {
     cfg: SharedConfig,
     transform: IMFTransform,
+    // Held for lifetime — see comment on D3DContext.
+    _d3d: D3DContext,
     output_provides_samples: bool,
     output_sample_size: u32,
     nv12_buf: Vec<u8>,
@@ -144,8 +170,8 @@ impl MftH264 {
     pub fn new(cfg: SharedConfig) -> Result<Self, CodecError> {
         ensure_mf_initialized()?;
 
-        let (transform, encoder_name) = pick_encoder(&cfg)?;
-        configure_transform(&transform, &cfg)?;
+        let d3d = create_d3d_context()?;
+        let (transform, encoder_name) = pick_encoder(&cfg, &d3d.manager)?;
 
         // Some encoders need the output sample provided by the caller; the
         // hardware ones generally provide their own. Cache the answer once.
@@ -180,6 +206,7 @@ impl MftH264 {
         Ok(Self {
             cfg,
             transform,
+            _d3d: d3d,
             output_provides_samples,
             output_sample_size: info.cbSize,
             nv12_buf: Vec::new(),
@@ -368,9 +395,66 @@ impl Drop for MftH264 {
 
 // ── helper functions ───────────────────────────────────────────────────────
 
-/// Enumerate MFTs that accept NV12 input + emit H.264 output, instantiate
-/// the first one, return it plus its friendly name.
-fn pick_encoder(cfg: &SharedConfig) -> Result<(IMFTransform, String), CodecError> {
+/// Build a D3D11 device (with `VIDEO_SUPPORT`) and wrap it in an
+/// `IMFDXGIDeviceManager` so hardware MFTs can accept
+/// `MFT_MESSAGE_SET_D3D_MANAGER`. Required for NVENC / AMF / QSV
+/// activation on most driver/hardware combinations.
+fn create_d3d_context() -> Result<D3DContext, CodecError> {
+    unsafe {
+        let feature_levels = [D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0];
+        let mut d3d_device: Option<ID3D11Device> = None;
+        D3D11CreateDevice(
+            None,
+            D3D_DRIVER_TYPE_HARDWARE,
+            HMODULE::default(),
+            D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+            Some(&feature_levels),
+            D3D11_SDK_VERSION,
+            Some(&mut d3d_device),
+            None,
+            None,
+        )
+        .map_err(|e| CodecError::Init(format!("D3D11CreateDevice (video): {e}")))?;
+        let d3d_device = d3d_device
+            .ok_or_else(|| CodecError::Init("D3D11CreateDevice returned no device".into()))?;
+
+        // MF requires the device to be in multi-threaded protected mode so
+        // its background threads can safely share the immediate context.
+        if let Ok(mt) = d3d_device.cast::<ID3D11Multithread>() {
+            let _ = mt.SetMultithreadProtected(true);
+        }
+
+        let mut reset_token: u32 = 0;
+        let mut manager: Option<IMFDXGIDeviceManager> = None;
+        MFCreateDXGIDeviceManager(&mut reset_token, &mut manager)
+            .map_err(|e| CodecError::Init(format!("MFCreateDXGIDeviceManager: {e}")))?;
+        let manager = manager.ok_or_else(|| {
+            CodecError::Init("MFCreateDXGIDeviceManager returned no manager".into())
+        })?;
+        manager
+            .ResetDevice(&d3d_device, reset_token)
+            .map_err(|e| CodecError::Init(format!("DeviceManager.ResetDevice: {e}")))?;
+
+        Ok(D3DContext {
+            _device: d3d_device,
+            manager,
+        })
+    }
+}
+
+/// Enumerate H.264 MFTs that accept NV12 input. Iterate every activator,
+/// trying ActivateObject → SetD3DManager → configure for each. Return the
+/// first that successfully accepts the full pipeline.
+///
+/// This iteration matters: a hardware MFT may be listed first by
+/// `MFT_ENUM_FLAG_SORTANDFILTER` but fail to activate (missing driver
+/// support, GPU contention, etc.). Falling through to the next candidate
+/// — including the in-box Microsoft software MFT — keeps the daemon
+/// running on hardware MF fails rather than disappearing back to openh264.
+fn pick_encoder(
+    cfg: &SharedConfig,
+    d3d_manager: &IMFDXGIDeviceManager,
+) -> Result<(IMFTransform, String), CodecError> {
     let input_info = MFT_REGISTER_TYPE_INFO {
         guidMajorType: MFMediaType_Video,
         guidSubtype: MFVideoFormat_NV12,
@@ -400,8 +484,7 @@ fn pick_encoder(cfg: &SharedConfig) -> Result<(IMFTransform, String), CodecError
         ));
     }
 
-    // Take ownership of the activator array so it's freed via CoTaskMemFree
-    // even on error paths below.
+    // Take ownership so CoTaskMemFree runs even on early returns.
     let activators_vec: Vec<Option<IMFActivate>> = unsafe {
         let slice = std::slice::from_raw_parts(activators, count as usize);
         let v = slice.to_vec();
@@ -409,20 +492,41 @@ fn pick_encoder(cfg: &SharedConfig) -> Result<(IMFTransform, String), CodecError
         v
     };
 
-    let first = activators_vec
-        .into_iter()
-        .next()
-        .flatten()
-        .ok_or_else(|| CodecError::NotAvailable("activator array empty".into()))?;
-    let name = activate_friendly_name(&first);
-    let transform: IMFTransform = unsafe {
-        first
-            .ActivateObject()
-            .map_err(|e| CodecError::Init(format!("ActivateObject: {e}")))?
-    };
+    let manager_ptr = d3d_manager.as_raw() as usize;
+    let mut last_err: Option<String> = None;
 
-    let _ = cfg; // cfg not needed for selection — kept for symmetry with other backends
-    Ok((transform, name))
+    for activator_opt in activators_vec {
+        let Some(activator) = activator_opt else {
+            continue;
+        };
+        let name = activate_friendly_name(&activator);
+
+        let transform: IMFTransform = match unsafe { activator.ActivateObject() } {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!(encoder = %name, err = %e, "MF activator ActivateObject failed; trying next");
+                last_err = Some(format!("[{name}] ActivateObject: {e}"));
+                continue;
+            }
+        };
+
+        // Hand the D3D manager to the transform. Software MFTs reject this
+        // — that's fine, we ignore the result.
+        let _ = unsafe { transform.ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, manager_ptr) };
+
+        if let Err(e) = configure_transform(&transform, cfg) {
+            tracing::warn!(encoder = %name, err = %e, "MF activator configure failed; trying next");
+            last_err = Some(format!("[{name}] configure: {e}"));
+            continue;
+        }
+
+        return Ok((transform, name));
+    }
+
+    Err(CodecError::NotAvailable(format!(
+        "no MF activator could be initialized — last error: {}",
+        last_err.unwrap_or_else(|| "(none)".to_string())
+    )))
 }
 
 /// Set output H.264 type, then input NV12 type. Order matters — MFT

@@ -33,6 +33,7 @@
 
 use anyhow::Result;
 use ix_rtc::rtc_peer::RtcPeer;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -71,6 +72,14 @@ impl ActiveEncoder {
             ActiveEncoder::Sw(e) => e.encode_yuv420(yuv, w, h, pts_us).map(Some),
         }
     }
+
+    fn force_keyframe(&mut self) {
+        use ix_codec::trait_::Encoder;
+        match self {
+            ActiveEncoder::Mft(e) => e.force_keyframe(),
+            ActiveEncoder::Sw(e) => e.force_keyframe(),
+        }
+    }
 }
 
 /// Default capture+encode resolution. Most modern laptops run 1920x1080
@@ -92,6 +101,11 @@ pub struct ScreenShare {
 struct Inner {
     peers: Mutex<Vec<Arc<RtcPeer>>>,
     cancel: CancellationToken,
+    /// Set by `add_peer` to ask the encoder to emit a keyframe on its
+    /// next encode call. Without an IDR, a fresh peer's H.264 decoder has
+    /// no SPS/PPS and silently drops every P-frame — the iPad UI stays
+    /// on "connecting…" forever even though the WebRTC transport is up.
+    keyframe_pending: AtomicBool,
 }
 
 impl ScreenShare {
@@ -102,6 +116,7 @@ impl ScreenShare {
         let inner = Arc::new(Inner {
             peers: Mutex::new(Vec::new()),
             cancel: cancel.clone(),
+            keyframe_pending: AtomicBool::new(false),
         });
         let worker_inner = inner.clone();
         std::thread::Builder::new()
@@ -122,7 +137,12 @@ impl ScreenShare {
         let mut peers = self.inner.peers.lock().await;
         if !peers.iter().any(|p| Arc::ptr_eq(p, &peer)) {
             peers.push(peer);
-            info!(active_peers = peers.len(), "screen-share: peer registered");
+            // Request a keyframe so this peer's decoder has SPS/PPS to bootstrap.
+            self.inner.keyframe_pending.store(true, Ordering::Relaxed);
+            info!(
+                active_peers = peers.len(),
+                "screen-share: peer registered; requesting keyframe"
+            );
         }
     }
 
@@ -211,6 +231,12 @@ fn run_blocking(inner: Arc<Inner>) -> Result<()> {
                             "screen-share: dropping frame with non-default resolution"
                         );
                         continue;
+                    }
+
+                    // If a peer just registered, ensure the next encoded
+                    // frame is an IDR so their decoder can bootstrap.
+                    if inner.keyframe_pending.swap(false, Ordering::Relaxed) {
+                        encoder.force_keyframe();
                     }
 
                     let yuv: Vec<u8> = (*frame.data).clone();

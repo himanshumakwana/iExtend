@@ -22,6 +22,13 @@ windows = { version = "0.58", features = [
     "Win32_System_Com",
     "Win32_Media",
     "Win32_Media_MediaFoundation",
+    # D3D11 device + DXGI device manager so hardware H.264 MFTs (NVENC /
+    # AMD / Intel Quick Sync) accept ActivateObject + MFT_MESSAGE_SET_D3D_MANAGER.
+    # Without these the hardware path returns D3DERR_INVALIDCALL.
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
 ] }
 
 [dev-dependencies]
