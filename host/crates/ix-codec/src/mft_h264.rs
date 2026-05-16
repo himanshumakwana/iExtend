@@ -52,12 +52,14 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDevice, ID3D11Device, ID3D11Multithread, D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
     D3D11_SDK_VERSION,
 };
+use windows::Win32::Media::MediaFoundation::MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS;
 use windows::Win32::Media::MediaFoundation::{
     eAVEncCommonRateControlMode_CBR, eAVEncH264VProfile_Base, CODECAPI_AVEncCommonMeanBitRate,
     CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncMPVDefaultBPictureCount,
-    CODECAPI_AVEncVideoForceKeyFrame, ICodecAPI, IMFActivate, IMFDXGIDeviceManager, IMFSample,
-    IMFTransform, MFCreateDXGIDeviceManager, MFCreateMediaType, MFCreateMemoryBuffer,
-    MFCreateSample, MFMediaType_Video, MFSampleExtension_CleanPoint, MFStartup, MFTEnumEx,
+    CODECAPI_AVEncVideoForceKeyFrame, ICodecAPI, IMFActivate, IMFDXGIDeviceManager,
+    IMFMediaEventGenerator, IMFSample, IMFTransform, METransformHaveOutput, METransformNeedInput,
+    MFCreateDXGIDeviceManager, MFCreateMediaType, MFCreateMemoryBuffer, MFCreateSample,
+    MFMediaType_Video, MFSampleExtension_CleanPoint, MFStartup, MFTEnumEx,
     MFT_FRIENDLY_NAME_Attribute, MFVideoFormat_H264, MFVideoFormat_NV12,
     MFVideoInterlace_Progressive, MFSTARTUP_LITE, MFT_CATEGORY_VIDEO_ENCODER,
     MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
@@ -66,7 +68,7 @@ use windows::Win32::Media::MediaFoundation::{
     MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MFT_REGISTER_TYPE_INFO, MF_E_TRANSFORM_NEED_MORE_INPUT,
     MF_E_TRANSFORM_STREAM_CHANGE, MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE,
     MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE, MF_MT_PIXEL_ASPECT_RATIO,
-    MF_MT_SUBTYPE, MF_VERSION,
+    MF_MT_SUBTYPE, MF_TRANSFORM_ASYNC, MF_TRANSFORM_ASYNC_UNLOCK, MF_VERSION,
 };
 use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, COINIT_MULTITHREADED};
 
@@ -150,6 +152,14 @@ struct D3DContext {
 pub struct MftH264 {
     cfg: SharedConfig,
     transform: IMFTransform,
+    /// Set on async MFTs (NVENC, AMD VCN). When true, per-frame encoding
+    /// is event-driven: wait for `METransformNeedInput` before
+    /// `ProcessInput`, then for `METransformHaveOutput` before
+    /// `ProcessOutput`. Sync MFTs (the in-box Microsoft software
+    /// encoder) use the simple poll-based path.
+    is_async: bool,
+    /// Cached event generator. Only meaningful when `is_async` is true.
+    event_gen: Option<IMFMediaEventGenerator>,
     // Held for lifetime — see comment on D3DContext.
     _d3d: D3DContext,
     output_provides_samples: bool,
@@ -171,7 +181,12 @@ impl MftH264 {
         ensure_mf_initialized()?;
 
         let d3d = create_d3d_context()?;
-        let (transform, encoder_name) = pick_encoder(&cfg, &d3d.manager)?;
+        let (transform, encoder_name, is_async) = pick_encoder(&cfg, &d3d.manager)?;
+        let event_gen = if is_async {
+            transform.cast::<IMFMediaEventGenerator>().ok()
+        } else {
+            None
+        };
 
         // Some encoders need the output sample provided by the caller; the
         // hardware ones generally provide their own. Cache the answer once.
@@ -199,6 +214,7 @@ impl MftH264 {
             fps = cfg.fps_num,
             bitrate_kbps = cfg.initial_bitrate_kbps,
             provides_samples = output_provides_samples,
+            is_async,
             "MF H.264 encoder ready"
         );
 
@@ -206,6 +222,8 @@ impl MftH264 {
         Ok(Self {
             cfg,
             transform,
+            is_async,
+            event_gen,
             _d3d: d3d,
             output_provides_samples,
             output_sample_size: info.cbSize,
@@ -240,12 +258,12 @@ impl MftH264 {
 
         i420_to_nv12(&yuv, width, height, &mut self.nv12_buf);
 
-        // 1. Build an IMFSample wrapping the NV12 bytes.
+        // Build an IMFSample wrapping the NV12 bytes.
         let sample = unsafe { create_input_sample(&self.nv12_buf, pts_us, self.cfg.fps_num)? };
 
-        // 2. Mark the next sample as a keyframe boundary if requested. The
-        //    Microsoft software encoder honors `CleanPoint`; hardware encoders
-        //    usually need the ICodecAPI route, so we do both.
+        // Mark the next sample as a keyframe boundary if requested. The
+        // Microsoft software encoder honors `CleanPoint`; hardware encoders
+        // usually need the ICodecAPI route, so we do both.
         if self.pending_keyframe {
             unsafe {
                 let _ = sample.SetUINT32(&MFSampleExtension_CleanPoint, 1);
@@ -259,68 +277,13 @@ impl MftH264 {
             self.pending_keyframe = false;
         }
 
-        // 3. Feed input.
-        unsafe {
-            self.transform
-                .ProcessInput(0, &sample, 0)
-                .map_err(|e| CodecError::EncodeFailed(format!("ProcessInput: {e}")))?;
-        }
-
-        // 4. Drain all output samples produced for this input. Concatenate
-        //    bitstreams into a single EncodedSlice so the broadcast path
-        //    stays one-write-per-frame.
         self.out_buf.clear();
         let mut is_keyframe = false;
-        loop {
-            let output_sample = if self.output_provides_samples {
-                None
-            } else {
-                Some(unsafe { allocate_output_sample(self.output_sample_size)? })
-            };
 
-            let mut data_buffers = [MFT_OUTPUT_DATA_BUFFER {
-                dwStreamID: 0,
-                pSample: std::mem::ManuallyDrop::new(output_sample),
-                dwStatus: 0,
-                pEvents: std::mem::ManuallyDrop::new(None),
-            }];
-            let mut status: u32 = 0;
-            let result = unsafe {
-                self.transform
-                    .ProcessOutput(0, &mut data_buffers, &mut status)
-            };
-            match result {
-                Ok(()) => {}
-                Err(e) if e.code() == MF_E_TRANSFORM_NEED_MORE_INPUT => break,
-                Err(e) if e.code() == MF_E_TRANSFORM_STREAM_CHANGE => {
-                    // Output format renegotiation — re-apply the output type
-                    // and retry. Rare for H.264, but the docs require it.
-                    set_output_type(&self.transform, &self.cfg)?;
-                    continue;
-                }
-                Err(e) => {
-                    return Err(CodecError::EncodeFailed(format!("ProcessOutput: {e}")));
-                }
-            }
-
-            // Take ownership out of the ManuallyDrop so the COM ref isn't
-            // leaked when we drop `data_buffers`.
-            let out_sample = unsafe { std::mem::ManuallyDrop::take(&mut data_buffers[0].pSample) }
-                .ok_or_else(|| CodecError::EncodeFailed("ProcessOutput: no sample".into()))?;
-            // Drop any events the encoder attached (we don't consume them).
-            unsafe {
-                std::mem::ManuallyDrop::drop(&mut data_buffers[0].pEvents);
-            }
-            unsafe {
-                if out_sample
-                    .GetUINT32(&MFSampleExtension_CleanPoint)
-                    .unwrap_or(0)
-                    != 0
-                {
-                    is_keyframe = true;
-                }
-                append_sample_bytes(&out_sample, &mut self.out_buf)?;
-            }
+        if self.is_async {
+            self.drive_async(&sample, &mut is_keyframe)?;
+        } else {
+            self.drive_sync(&sample, &mut is_keyframe)?;
         }
 
         if self.out_buf.is_empty() {
@@ -336,6 +299,152 @@ impl MftH264 {
             slice_index,
         }))
     }
+
+    /// Sync path: feed input, then drain ProcessOutput until it reports
+    /// NEED_MORE_INPUT. Used by the Microsoft in-box software MFT.
+    fn drive_sync(&mut self, sample: &IMFSample, is_keyframe: &mut bool) -> Result<(), CodecError> {
+        unsafe {
+            self.transform
+                .ProcessInput(0, sample, 0)
+                .map_err(|e| CodecError::EncodeFailed(format!("ProcessInput: {e}")))?;
+        }
+        loop {
+            match self.process_one_output(is_keyframe)? {
+                ProcessOutputStep::Got => continue,
+                ProcessOutputStep::NeedInput => return Ok(()),
+                ProcessOutputStep::StreamChange => {
+                    set_output_type(&self.transform, &self.cfg)?;
+                }
+            }
+        }
+    }
+
+    /// Async path: wait for METransformNeedInput → ProcessInput, then for
+    /// METransformHaveOutput → ProcessOutput. NVENC / AMD VCN need this.
+    fn drive_async(
+        &mut self,
+        sample: &IMFSample,
+        is_keyframe: &mut bool,
+    ) -> Result<(), CodecError> {
+        let event_gen = self
+            .event_gen
+            .as_ref()
+            .ok_or_else(|| CodecError::EncodeFailed("async MFT without event gen".into()))?
+            .clone();
+        let mut input_fed = false;
+
+        // Spin events until we've fed our input AND drained at least one
+        // output for this frame. Hardware encoders without B-frames emit
+        // one HaveOutput per input.
+        while !input_fed || self.out_buf.is_empty() {
+            let event = unsafe { event_gen.GetEvent(MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS(0)) }
+                .map_err(|e| CodecError::EncodeFailed(format!("GetEvent: {e}")))?;
+            let event_type = unsafe { event.GetType() }
+                .map_err(|e| CodecError::EncodeFailed(format!("GetType: {e}")))?
+                as i32;
+
+            if event_type == METransformNeedInput.0 {
+                if !input_fed {
+                    unsafe {
+                        self.transform
+                            .ProcessInput(0, sample, 0)
+                            .map_err(|e| CodecError::EncodeFailed(format!("ProcessInput: {e}")))?;
+                    }
+                    input_fed = true;
+                }
+                // If we already fed and the encoder asks for more, the
+                // next encode call will satisfy it — leave the event for
+                // then by not re-feeding here.
+            } else if event_type == METransformHaveOutput.0 {
+                match self.process_one_output(is_keyframe)? {
+                    ProcessOutputStep::Got | ProcessOutputStep::NeedInput => {}
+                    ProcessOutputStep::StreamChange => {
+                        set_output_type(&self.transform, &self.cfg)?;
+                    }
+                }
+            }
+            // Other event types (drain-complete, error, etc.) are
+            // informational; we ignore them.
+        }
+        Ok(())
+    }
+
+    /// One round-trip through ProcessOutput. Used by both sync and async
+    /// paths. Returns whether the call extracted a sample, signalled
+    /// NEED_MORE_INPUT, or asked for a stream-change re-init.
+    fn process_one_output(
+        &mut self,
+        is_keyframe: &mut bool,
+    ) -> Result<ProcessOutputStep, CodecError> {
+        let output_sample = if self.output_provides_samples {
+            None
+        } else {
+            Some(unsafe { allocate_output_sample(self.output_sample_size)? })
+        };
+
+        let mut data_buffers = [MFT_OUTPUT_DATA_BUFFER {
+            dwStreamID: 0,
+            pSample: std::mem::ManuallyDrop::new(output_sample),
+            dwStatus: 0,
+            pEvents: std::mem::ManuallyDrop::new(None),
+        }];
+        let mut status: u32 = 0;
+        let result = unsafe {
+            self.transform
+                .ProcessOutput(0, &mut data_buffers, &mut status)
+        };
+        match result {
+            Ok(()) => {}
+            Err(e) if e.code() == MF_E_TRANSFORM_NEED_MORE_INPUT => {
+                // Free any output sample we pre-allocated.
+                unsafe {
+                    std::mem::ManuallyDrop::drop(&mut data_buffers[0].pSample);
+                    std::mem::ManuallyDrop::drop(&mut data_buffers[0].pEvents);
+                }
+                return Ok(ProcessOutputStep::NeedInput);
+            }
+            Err(e) if e.code() == MF_E_TRANSFORM_STREAM_CHANGE => {
+                unsafe {
+                    std::mem::ManuallyDrop::drop(&mut data_buffers[0].pSample);
+                    std::mem::ManuallyDrop::drop(&mut data_buffers[0].pEvents);
+                }
+                return Ok(ProcessOutputStep::StreamChange);
+            }
+            Err(e) => {
+                unsafe {
+                    std::mem::ManuallyDrop::drop(&mut data_buffers[0].pSample);
+                    std::mem::ManuallyDrop::drop(&mut data_buffers[0].pEvents);
+                }
+                return Err(CodecError::EncodeFailed(format!("ProcessOutput: {e}")));
+            }
+        }
+
+        let out_sample = unsafe { std::mem::ManuallyDrop::take(&mut data_buffers[0].pSample) }
+            .ok_or_else(|| CodecError::EncodeFailed("ProcessOutput: no sample".into()))?;
+        unsafe {
+            std::mem::ManuallyDrop::drop(&mut data_buffers[0].pEvents);
+        }
+        unsafe {
+            if out_sample
+                .GetUINT32(&MFSampleExtension_CleanPoint)
+                .unwrap_or(0)
+                != 0
+            {
+                *is_keyframe = true;
+            }
+            append_sample_bytes(&out_sample, &mut self.out_buf)?;
+        }
+        Ok(ProcessOutputStep::Got)
+    }
+}
+
+enum ProcessOutputStep {
+    /// Got a sample; bytes appended to `self.out_buf`.
+    Got,
+    /// Encoder needs more input — drain loop should stop.
+    NeedInput,
+    /// Encoder renegotiated output type — caller should re-apply.
+    StreamChange,
 }
 
 impl Encoder for MftH264 {
@@ -454,7 +563,7 @@ fn create_d3d_context() -> Result<D3DContext, CodecError> {
 fn pick_encoder(
     cfg: &SharedConfig,
     d3d_manager: &IMFDXGIDeviceManager,
-) -> Result<(IMFTransform, String), CodecError> {
+) -> Result<(IMFTransform, String, bool), CodecError> {
     let input_info = MFT_REGISTER_TYPE_INFO {
         guidMajorType: MFMediaType_Video,
         guidSubtype: MFVideoFormat_NV12,
@@ -501,6 +610,11 @@ fn pick_encoder(
         };
         let name = activate_friendly_name(&activator);
 
+        // Pre-unlock async MFTs. AMD's H.264 encoder fails ActivateObject
+        // outright without this set on the activator; setting it has no
+        // effect on sync MFTs so it's safe to do unconditionally.
+        let _ = unsafe { activator.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1) };
+
         let transform: IMFTransform = match unsafe { activator.ActivateObject() } {
             Ok(t) => t,
             Err(e) => {
@@ -514,13 +628,29 @@ fn pick_encoder(
         // — that's fine, we ignore the result.
         let _ = unsafe { transform.ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, manager_ptr) };
 
+        // Async MFTs also need the unlock attribute set on the transform
+        // itself before any SetXxxType call, otherwise SetInputType returns
+        // MF_E_TRANSFORM_ASYNC_LOCKED (0xC00D6D77).
+        let is_async = unsafe {
+            match transform.GetAttributes() {
+                Ok(attrs) => {
+                    let async_flag = attrs.GetUINT32(&MF_TRANSFORM_ASYNC).unwrap_or(0) != 0;
+                    if async_flag {
+                        let _ = attrs.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1);
+                    }
+                    async_flag
+                }
+                Err(_) => false,
+            }
+        };
+
         if let Err(e) = configure_transform(&transform, cfg) {
             tracing::warn!(encoder = %name, err = %e, "MF activator configure failed; trying next");
             last_err = Some(format!("[{name}] configure: {e}"));
             continue;
         }
 
-        return Ok((transform, name));
+        return Ok((transform, name, is_async));
     }
 
     Err(CodecError::NotAvailable(format!(
