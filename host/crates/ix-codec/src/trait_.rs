@@ -52,6 +52,9 @@ pub enum EncoderKind {
     VaapiHevc,
     /// x264/openh264 software — H.264 ultralow-latency. Battery-drain warning.
     X264SoftwareUlllSw,
+    /// Media Foundation H.264 (Windows). Auto-routes to NVENC / AMF / QSV /
+    /// software depending on what's installed on the host.
+    MfH264,
 }
 
 impl EncoderKind {
@@ -61,6 +64,10 @@ impl EncoderKind {
             EncoderKind::NvencAv1 => 0,
             EncoderKind::NvencHevc | EncoderKind::QsvHevc | EncoderKind::AmfHevc => 1,
             EncoderKind::VaapiHevc => 2,
+            // Media Foundation routes to whatever hardware is present; on
+            // hybrid laptops this is the most likely path to land HW encode
+            // without per-vendor bring-up, so prefer it over openh264.
+            EncoderKind::MfH264 => 50,
             EncoderKind::X264SoftwareUlllSw => 99,
         }
     }

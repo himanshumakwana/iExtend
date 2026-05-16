@@ -49,3 +49,8 @@ pub mod vaapi_hevc;
 
 #[cfg(feature = "sw-only")]
 pub mod x264_sw;
+
+// Media Foundation H.264 — always present on Windows, no SDK install
+// required. Routes to NVENC / AMD / Intel Quick Sync / software per host.
+#[cfg(windows)]
+pub mod mft_h264;

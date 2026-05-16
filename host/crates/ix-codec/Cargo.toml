@@ -13,6 +13,17 @@ ix-display  = { path = "../ix-display" }
 bytes       = "1"
 openh264    = { version = "0.6", optional = true }
 
+# Media Foundation H.264 encoder (Windows-only). MF is part of every
+# Windows install, so no feature flag — it's always available on Windows
+# builds and auto-selects NVENC / AMF / QSV / software per host.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_Media",
+    "Win32_Media_MediaFoundation",
+] }
+
 [dev-dependencies]
 proptest = "1"
 

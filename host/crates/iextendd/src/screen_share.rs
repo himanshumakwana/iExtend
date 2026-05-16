@@ -40,12 +40,38 @@ use tracing::{info, warn};
 
 #[cfg(target_os = "windows")]
 use ix_codec::{
-    trait_::{ColorSpace, Profile},
+    mft_h264::MftH264,
+    trait_::{ColorSpace, EncodedSlice, Profile},
     x264_sw::X264Sw,
-    SharedConfig,
+    CodecError, SharedConfig,
 };
 #[cfg(target_os = "windows")]
 use std::time::Duration;
+
+/// Run-time choice of encoder. MFT is preferred (hardware-accelerated via
+/// NVENC/AMF/QSV); X264Sw is the openh264 fallback for hosts where MF
+/// can't activate any video encoder.
+#[cfg(target_os = "windows")]
+enum ActiveEncoder {
+    Mft(MftH264),
+    Sw(X264Sw),
+}
+
+#[cfg(target_os = "windows")]
+impl ActiveEncoder {
+    fn encode_yuv420(
+        &mut self,
+        yuv: Vec<u8>,
+        w: u32,
+        h: u32,
+        pts_us: u64,
+    ) -> Result<Option<EncodedSlice>, CodecError> {
+        match self {
+            ActiveEncoder::Mft(e) => e.encode_yuv420(yuv, w, h, pts_us),
+            ActiveEncoder::Sw(e) => e.encode_yuv420(yuv, w, h, pts_us).map(Some),
+        }
+    }
+}
 
 /// Default capture+encode resolution. Most modern laptops run 1920x1080
 /// or higher; if a smaller display is the primary, the DXGI capture
@@ -141,13 +167,21 @@ fn run_blocking(inner: Arc<Inner>) -> Result<()> {
         .enable_all()
         .build()?;
 
-    let encoder_result = X264Sw::new(cfg);
-    let mut encoder = match encoder_result {
-        Ok(e) => e,
-        Err(e) => {
-            warn!(err = %e, "screen-share: encoder init failed; idling");
-            rt.block_on(async { inner.cancel.cancelled().await });
-            return Ok(());
+    // Prefer Media Foundation (auto-routes to NVENC/AMF/QSV). Fall back to
+    // openh264 only if MF can't bring up *any* H.264 encoder on this host —
+    // rare in practice since the in-box MS software encoder always satisfies.
+    let mut encoder = match MftH264::new(cfg.clone()) {
+        Ok(e) => ActiveEncoder::Mft(e),
+        Err(mf_err) => {
+            warn!(err = %mf_err, "screen-share: MF H.264 unavailable; falling back to openh264");
+            match X264Sw::new(cfg) {
+                Ok(s) => ActiveEncoder::Sw(s),
+                Err(sw_err) => {
+                    warn!(err = %sw_err, "screen-share: encoder init failed; idling");
+                    rt.block_on(async { inner.cancel.cancelled().await });
+                    return Ok(());
+                }
+            }
         }
     };
 
@@ -182,7 +216,8 @@ fn run_blocking(inner: Arc<Inner>) -> Result<()> {
                     let yuv: Vec<u8> = (*frame.data).clone();
                     let pts_us = frame.pts_us;
                     let slice = match encoder.encode_yuv420(yuv, frame.width, frame.height, pts_us) {
-                        Ok(s) => s,
+                        Ok(Some(s)) => s,
+                        Ok(None) => continue, // MF encoder buffered; no output this tick
                         Err(e) => {
                             warn!(err = %e, "screen-share: encode failed");
                             continue;
