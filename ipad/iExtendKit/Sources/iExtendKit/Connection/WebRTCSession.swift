@@ -38,10 +38,15 @@ public final class WebRTCSession: ObservableObject {
 
     public let peer: PeerConnection
     private let signaling: SignalingClient
+    /// Per-instance delegate bridge. Held for lifetime so weak-ref death
+    /// doesn't silently swallow delegate callbacks.
+    private let bridge: SessionDelegateBridge
 
     public init(host: String, signalingPort: UInt16 = 7783, iceServers: [String] = ["stun:stun.l.google.com:19302"]) {
+        let bridge = SessionDelegateBridge()
+        self.bridge = bridge
         self.signaling = SignalingClient(host: host, port: signalingPort)
-        self.peer = PeerConnection(iceServers: iceServers, delegate: SessionDelegateBridge.shared)
+        self.peer = PeerConnection(iceServers: iceServers, delegate: bridge)
 
         // Wire signaling's callbacks. We hold a strong ref so the bridge
         // outlives the closures.
@@ -58,12 +63,16 @@ public final class WebRTCSession: ObservableObject {
             }
         }
 
-        // The bridge fans delegate calls back into this WebRTCSession instance.
-        SessionDelegateBridge.shared.attach(self)
+        // Wire the bridge to this instance. Per-instance, so concurrent
+        // sessions (reconnect) don't clobber each other's delivery.
+        bridge.attach(self)
+
+        print("[WebRTCSession] init host=\(host) port=\(signalingPort)")
     }
 
     /// Start the session: open signaling, create the offer, send it.
     public func start() async {
+        print("[WebRTCSession] start")
         state = .signaling
         signaling.start()
 
@@ -72,7 +81,9 @@ public final class WebRTCSession: ObservableObject {
             state = .offering
             try await signaling.send(.offer(sdp: offerSDP))
             state = .waitingForAnswer
+            print("[WebRTCSession] offer sent, awaiting answer")
         } catch {
+            print("[WebRTCSession] start failed: \(error)")
             state = .failed(reason: "createOffer: \(error.localizedDescription)")
         }
     }
@@ -115,12 +126,14 @@ public final class WebRTCSession: ObservableObject {
 
     fileprivate func onPeerStateChange(_ s: RTCPeerConnectionState) async {
 #if canImport(WebRTC)
+        let from = state
         switch s {
         case .connected: state = .connected
         case .failed:    state = .failed(reason: "peer connection failed")
         case .closed:    state = .closed
         default:         break
         }
+        print("[WebRTCSession] peer state=\(s.rawValue) → session.state \(from) → \(state)")
 #endif
     }
 
@@ -145,14 +158,16 @@ public final class WebRTCSession: ObservableObject {
 /// bridge below is the workaround: a singleton plain class that takes
 /// callbacks and re-dispatches them onto the right `WebRTCSession`.
 private final class SessionDelegateBridge: PeerConnectionDelegate, @unchecked Sendable {
-    static let shared = SessionDelegateBridge()
     private weak var session: WebRTCSession?
+
+    init() {}
 
     func attach(_ session: WebRTCSession) {
         self.session = session
     }
 
     func peerConnectionDidChangeState(_ state: RTCPeerConnectionState) async {
+        print("[SessionDelegateBridge] peerConnectionDidChangeState=\(state.rawValue)")
         await session?.onPeerStateChange(state)
     }
 

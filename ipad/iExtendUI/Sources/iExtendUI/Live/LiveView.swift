@@ -8,6 +8,7 @@
 // Plan 8: reprojection and cursor mask are activated by MetalRenderer.
 
 import SwiftUI
+import Combine
 
 // Toolbar configuration enums — referenced by FloatingToolbar (which doesn't
 // depend on UIKit) so they live outside the iOS-only gate.
@@ -181,6 +182,10 @@ public final class SessionViewModel: ObservableObject {
     /// renderer when it transitions to `.connected`.
     @Published public var webrtcSession: WebRTCSession?
 
+    /// Combine sink subscribed to the current WebRTCSession's `$state`.
+    /// Replaced (with Cancellable auto-disposal) on every `startStreaming`.
+    private var stateCancellable: AnyCancellable?
+
     public init(session: IExtendSession) {
         self.session = session
         do {
@@ -217,28 +222,48 @@ public final class SessionViewModel: ObservableObject {
             )
             await session.connect(to: hostInfo)
 
-            await s.start()
-
-            // Mirror WebRTC state into SessionState. We poll s.state on
-            // each main-actor tick rather than subscribing to a publisher
-            // because @Published doesn't expose an async stream we can
-            // for-await directly.
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                while self.webrtcSession === s {
-                    switch s.state {
-                    case .connected:
-                        await self.session.wentLive(stats: .zero)
-                    case .failed(let reason):
-                        await self.session.fail(.unknown(message: reason))
-                    case .closed:
-                        await self.session.disconnect(reason: .userRequested)
-                    default:
-                        break
+            // Subscribe to `s.$state` BEFORE awaiting start() so we don't
+            // miss the very first transition (which can land synchronously
+            // on signaling.start()).
+            //
+            // Combine's @Published runs on whatever queue mutates the
+            // property; WebRTCSession is @MainActor so the sink fires on
+            // main — safe to call back into self.session from here.
+            //
+            // Replacing self.stateCancellable cancels any prior
+            // subscription via AnyCancellable's drop semantics.
+            self.stateCancellable = s.$state
+                .removeDuplicates()
+                .sink { [weak self] newState in
+                    print("[SessionViewModel] webrtc state → \(newState)")
+                    guard let self else { return }
+                    Task { @MainActor in
+                        await self.handleWebRTCState(newState, ifSessionIs: s)
                     }
-                    try? await Task.sleep(nanoseconds: 250_000_000)
                 }
-            }
+
+            await s.start()
+        }
+    }
+
+    /// Translate WebRTCSession state into IExtendSession lifecycle calls.
+    /// Guarded by `ifSessionIs` so a late-firing sink for a torn-down
+    /// session can't move the lifecycle for a *new* session.
+    private func handleWebRTCState(
+        _ newState: WebRTCSessionState,
+        ifSessionIs expected: WebRTCSession
+    ) async {
+        guard self.webrtcSession === expected else { return }
+        switch newState {
+        case .connected:
+            print("[SessionViewModel] dispatching wentLive")
+            await self.session.wentLive(stats: .zero)
+        case .failed(let reason):
+            await self.session.fail(.unknown(message: reason))
+        case .closed:
+            await self.session.disconnect(reason: .userRequested)
+        default:
+            break
         }
     }
 
@@ -255,6 +280,7 @@ public final class SessionViewModel: ObservableObject {
     private func observeSession() async {
         for await state in await session.stateStream() {
             await MainActor.run {
+                print("[SessionViewModel] sessionState → \(state)")
                 self.sessionState = state
                 switch state {
                 case .live(let stats):

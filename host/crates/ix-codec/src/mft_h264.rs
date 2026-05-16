@@ -614,12 +614,19 @@ fn pick_encoder(
 
     let manager_ptr = d3d_manager.as_raw() as usize;
     let mut last_err: Option<String> = None;
+    // Some vendors (AMD) register the same MFT twice — once per surface
+    // type. Both fail with the same error in our setup, so skip duplicates
+    // after the first failure to cut the noise.
+    let mut tried_names: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for activator_opt in activators_vec {
         let Some(activator) = activator_opt else {
             continue;
         };
         let name = activate_friendly_name(&activator);
+        if !tried_names.insert(name.clone()) {
+            continue;
+        }
 
         // Pre-unlock async MFTs. AMD's H.264 encoder fails ActivateObject
         // outright without this set on the activator; setting it has no
