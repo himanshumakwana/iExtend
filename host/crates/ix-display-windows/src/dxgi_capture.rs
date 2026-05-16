@@ -34,8 +34,11 @@ use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 use windows::core::Interface;
-use windows::Win32::Foundation::HANDLE;
-use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
+use windows::Win32::Foundation::{HANDLE, HMODULE};
+use windows::Win32::Graphics::Direct3D::{
+    D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_10_1,
+    D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1,
+};
 use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_BIND_FLAG,
     D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_FLAG, D3D11_MAP_READ, D3D11_RESOURCE_MISC_FLAG,
@@ -43,8 +46,9 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::{
-    CreateDXGIFactory1, IDXGIAdapter, IDXGIFactory1, IDXGIOutput, IDXGIOutput1,
-    IDXGIOutputDuplication, IDXGIResource, DXGI_OUTDUPL_FRAME_INFO,
+    CreateDXGIFactory1, IDXGIAdapter, IDXGIAdapter1, IDXGIFactory1, IDXGIOutput, IDXGIOutput1,
+    IDXGIOutputDuplication, IDXGIResource, DXGI_ADAPTER_FLAG_SOFTWARE, DXGI_ERROR_NOT_FOUND,
+    DXGI_ERROR_UNSUPPORTED, DXGI_OUTDUPL_FRAME_INFO,
 };
 
 /// One BGRA frame, converted to YUV420P, with capture timestamp.
@@ -74,10 +78,18 @@ pub enum CaptureError {
     ChannelClosed,
 }
 
-/// Acquire `IDXGIOutputDuplication` against the first adapter's first output.
+/// Acquire `IDXGIOutputDuplication`, walking every `(adapter, output)` pair
+/// until one combination accepts `DuplicateOutput`.
 ///
-/// Returns the D3D11 device + context (we hold them so they outlive the
-/// duplication interface) and the duplication object itself.
+/// Desktop Duplication requires the D3D11 device to live on the same adapter
+/// as the output. On hybrid-graphics laptops (e.g. AMD iGPU + NVIDIA dGPU)
+/// `D3D11CreateDevice(NULL, HARDWARE, …)` lands on the discrete GPU while
+/// the display is owned by the integrated adapter — the mismatch surfaces
+/// as `DXGI_ERROR_UNSUPPORTED` from `DuplicateOutput`. To avoid that we pin
+/// the D3D11 device to each candidate adapter explicitly.
+///
+/// Returns the D3D11 device + context (held so they outlive the duplication
+/// interface) and the duplication object itself.
 fn init_duplication() -> Result<
     (
         ID3D11Device,
@@ -88,52 +100,127 @@ fn init_duplication() -> Result<
     ),
     CaptureError,
 > {
+    // Pinned to ≥ 10.0 because Desktop Duplication is unavailable on 9.x.
+    let feature_levels = [
+        D3D_FEATURE_LEVEL_11_1,
+        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0,
+    ];
+
     unsafe {
-        // 1. D3D11 device — needed both for creating the duplication and
-        //    later for the staging texture we copy pixels into.
-        let mut device: Option<ID3D11Device> = None;
-        let mut context: Option<ID3D11DeviceContext> = None;
-        D3D11CreateDevice(
-            None,
-            D3D_DRIVER_TYPE_HARDWARE,
-            windows::Win32::Foundation::HMODULE::default(),
-            D3D11_CREATE_DEVICE_FLAG(0),
-            None,
-            D3D11_SDK_VERSION,
-            Some(&mut device),
-            None,
-            Some(&mut context),
-        )
-        .map_err(CaptureError::Init)?;
-
-        let device =
-            device.ok_or_else(|| CaptureError::Init(windows::core::Error::from_win32()))?;
-        let context =
-            context.ok_or_else(|| CaptureError::Init(windows::core::Error::from_win32()))?;
-
-        // 2. Walk DXGI to find the first output (= primary monitor).
         let factory: IDXGIFactory1 = CreateDXGIFactory1().map_err(CaptureError::Init)?;
-        let adapter: IDXGIAdapter = factory.EnumAdapters(0).map_err(CaptureError::Init)?;
-        let output: IDXGIOutput = adapter.EnumOutputs(0).map_err(CaptureError::Init)?;
-        let output1: IDXGIOutput1 = output.cast().map_err(CaptureError::Init)?;
 
-        // 3. Duplicate.
-        let dup: IDXGIOutputDuplication = output1
-            .DuplicateOutput(&device)
-            .map_err(CaptureError::Init)?;
+        let mut last_err: Option<windows::core::Error> = None;
+        let mut adapter_idx = 0u32;
+        loop {
+            let adapter1: IDXGIAdapter1 = match factory.EnumAdapters1(adapter_idx) {
+                Ok(a) => a,
+                Err(e) if e.code() == DXGI_ERROR_NOT_FOUND => break,
+                Err(e) => {
+                    last_err = Some(e);
+                    break;
+                }
+            };
+            adapter_idx += 1;
 
-        let desc = dup.GetDesc();
-        let width = desc.ModeDesc.Width;
-        let height = desc.ModeDesc.Height;
+            let desc = adapter1.GetDesc1().map_err(CaptureError::Init)?;
+            // Skip the Microsoft Basic Render Driver / WARP — desktop
+            // duplication is not supported on software adapters.
+            if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0 {
+                continue;
+            }
 
-        info!(
-            width,
-            height,
-            format = ?desc.ModeDesc.Format,
-            "DXGI duplication acquired"
-        );
+            let adapter_name: String = String::from_utf16_lossy(
+                &desc
+                    .Description
+                    .iter()
+                    .take_while(|&&c| c != 0)
+                    .copied()
+                    .collect::<Vec<u16>>(),
+            );
+            let adapter: IDXGIAdapter = adapter1.cast().map_err(CaptureError::Init)?;
 
-        Ok((device, context, dup, width, height))
+            let mut output_idx = 0u32;
+            loop {
+                let output: IDXGIOutput = match adapter.EnumOutputs(output_idx) {
+                    Ok(o) => o,
+                    Err(e) if e.code() == DXGI_ERROR_NOT_FOUND => break,
+                    Err(e) => {
+                        last_err = Some(e);
+                        break;
+                    }
+                };
+                output_idx += 1;
+
+                let output1: IDXGIOutput1 = match output.cast() {
+                    Ok(o) => o,
+                    Err(e) => {
+                        last_err = Some(e);
+                        continue;
+                    }
+                };
+
+                // Pin the device to *this* adapter. When pAdapter is non-null
+                // the driver type MUST be UNKNOWN, else D3D11CreateDevice
+                // returns E_INVALIDARG.
+                let mut device: Option<ID3D11Device> = None;
+                let mut context: Option<ID3D11DeviceContext> = None;
+                if let Err(e) = D3D11CreateDevice(
+                    &adapter,
+                    D3D_DRIVER_TYPE_UNKNOWN,
+                    HMODULE::default(),
+                    D3D11_CREATE_DEVICE_FLAG(0),
+                    Some(&feature_levels),
+                    D3D11_SDK_VERSION,
+                    Some(&mut device),
+                    None,
+                    Some(&mut context),
+                ) {
+                    last_err = Some(e);
+                    continue;
+                }
+                let (device, context) = match (device, context) {
+                    (Some(d), Some(c)) => (d, c),
+                    _ => continue,
+                };
+
+                match output1.DuplicateOutput(&device) {
+                    Ok(dup) => {
+                        let dup_desc = dup.GetDesc();
+                        let width = dup_desc.ModeDesc.Width;
+                        let height = dup_desc.ModeDesc.Height;
+                        info!(
+                            adapter = %adapter_name,
+                            adapter_idx = adapter_idx - 1,
+                            output_idx = output_idx - 1,
+                            width,
+                            height,
+                            format = ?dup_desc.ModeDesc.Format,
+                            "DXGI duplication acquired"
+                        );
+                        return Ok((device, context, dup, width, height));
+                    }
+                    Err(e) => {
+                        warn!(
+                            adapter = %adapter_name,
+                            output_idx = output_idx - 1,
+                            err = %e,
+                            "DuplicateOutput rejected this adapter/output pair; trying next"
+                        );
+                        last_err = Some(e);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        Err(CaptureError::Init(last_err.unwrap_or_else(|| {
+            windows::core::Error::new(
+                DXGI_ERROR_UNSUPPORTED,
+                "no DXGI adapter/output pair supported Desktop Duplication",
+            )
+        })))
     }
 }
 
