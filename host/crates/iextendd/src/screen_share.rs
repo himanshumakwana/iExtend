@@ -120,7 +120,7 @@ fn run_blocking(inner: Arc<Inner>) -> Result<()> {
     use ix_display_windows::CapturedFrame;
     use tokio::sync::mpsc;
 
-    info!("screen-share: starting Windows DXGI capture path");
+    info!("screen-share: starting Windows.Graphics.Capture path");
 
     let cfg = SharedConfig {
         width: DEFAULT_W,

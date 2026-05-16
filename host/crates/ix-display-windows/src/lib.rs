@@ -31,15 +31,21 @@
     clippy::type_complexity
 )]
 
+mod capture_types;
 mod dxgi_capture;
 mod error;
 mod frame_pump;
 mod iddcx_bindings;
 mod inverted_call;
+mod wgc_capture;
 
-pub use dxgi_capture::{spawn_capture_thread, CaptureError, CapturedFrame};
+pub use capture_types::{CaptureError, CapturedFrame};
 pub use error::{Error, Result};
 pub use frame_pump::GpuFrame;
+// WGC is the primary capture path — hybrid-graphics-aware, works on any
+// Windows 10 1903+. `dxgi_capture` is retained as a fallback option but
+// not re-exported by default.
+pub use wgc_capture::spawn_capture_thread;
 
 use ix_display::{
     DisplayError, DisplayMode, DisplaySource, GpuFrame as SharedGpuFrame, GpuFrameKind,

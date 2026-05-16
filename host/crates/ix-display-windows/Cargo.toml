@@ -13,6 +13,7 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
     "Win32_Storage_FileSystem",
     "Win32_System_IO",
     "Win32_System_Threading",
@@ -21,6 +22,14 @@ windows = { version = "0.58", features = [
     "Win32_System_WindowsProgramming",
     # Plan 5 frame_pump uses QueryPerformanceFrequency for slot timing.
     "Win32_System_Performance",
+    # WGC (Windows.Graphics.Capture) — hybrid-graphics-aware capture path.
+    "Foundation",
+    "Graphics",
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
 ] }
 tokio     = { workspace = true }
 thiserror = { workspace = true }
