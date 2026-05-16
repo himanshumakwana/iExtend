@@ -40,6 +40,7 @@ use crate::{
     CodecError, ColorSpace, EncodedSlice, Encoder, EncoderKind, Negotiated, PeerCaps, Profile,
 };
 use ix_display::{DamageRect, GpuFrame};
+use std::collections::VecDeque;
 use std::ptr;
 use tracing::info;
 
@@ -52,23 +53,24 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDevice, ID3D11Device, ID3D11Multithread, D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
     D3D11_SDK_VERSION,
 };
-use windows::Win32::Media::MediaFoundation::MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS;
 use windows::Win32::Media::MediaFoundation::{
-    eAVEncCommonRateControlMode_CBR, eAVEncH264VProfile_Base, CODECAPI_AVEncCommonMeanBitRate,
-    CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncMPVDefaultBPictureCount,
-    CODECAPI_AVEncVideoForceKeyFrame, ICodecAPI, IMFActivate, IMFDXGIDeviceManager,
-    IMFMediaEventGenerator, IMFSample, IMFTransform, METransformHaveOutput, METransformNeedInput,
-    MFCreateDXGIDeviceManager, MFCreateMediaType, MFCreateMemoryBuffer, MFCreateSample,
-    MFMediaType_Video, MFSampleExtension_CleanPoint, MFStartup, MFTEnumEx,
-    MFT_FRIENDLY_NAME_Attribute, MFVideoFormat_H264, MFVideoFormat_NV12,
+    eAVEncCommonRateControlMode_CBR, eAVEncH264VProfile_Base, CODECAPI_AVEncCommonLowLatency,
+    CODECAPI_AVEncCommonMeanBitRate, CODECAPI_AVEncCommonQualityVsSpeed,
+    CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncCommonRealTime,
+    CODECAPI_AVEncMPVDefaultBPictureCount, CODECAPI_AVEncVideoForceKeyFrame, ICodecAPI,
+    IMFActivate, IMFDXGIDeviceManager, IMFMediaEventGenerator, IMFSample, IMFTransform,
+    METransformHaveOutput, METransformNeedInput, MFCreateDXGIDeviceManager, MFCreateMediaType,
+    MFCreateMemoryBuffer, MFCreateSample, MFMediaType_Video, MFSampleExtension_CleanPoint,
+    MFStartup, MFTEnumEx, MFT_FRIENDLY_NAME_Attribute, MFVideoFormat_H264, MFVideoFormat_NV12,
     MFVideoInterlace_Progressive, MFSTARTUP_LITE, MFT_CATEGORY_VIDEO_ENCODER,
     MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
     MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_START_OF_STREAM,
     MFT_MESSAGE_SET_D3D_MANAGER, MFT_OUTPUT_DATA_BUFFER, MFT_OUTPUT_STREAM_INFO,
-    MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MFT_REGISTER_TYPE_INFO, MF_E_TRANSFORM_NEED_MORE_INPUT,
-    MF_E_TRANSFORM_STREAM_CHANGE, MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE,
-    MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE, MF_MT_PIXEL_ASPECT_RATIO,
-    MF_MT_SUBTYPE, MF_TRANSFORM_ASYNC, MF_TRANSFORM_ASYNC_UNLOCK, MF_VERSION,
+    MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MFT_REGISTER_TYPE_INFO, MF_EVENT_FLAG_NO_WAIT,
+    MF_E_NO_EVENTS_AVAILABLE, MF_E_TRANSFORM_NEED_MORE_INPUT, MF_E_TRANSFORM_STREAM_CHANGE,
+    MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE,
+    MF_MT_MPEG2_PROFILE, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE, MF_TRANSFORM_ASYNC,
+    MF_TRANSFORM_ASYNC_UNLOCK, MF_VERSION,
 };
 use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, COINIT_MULTITHREADED};
 
@@ -160,6 +162,11 @@ pub struct MftH264 {
     is_async: bool,
     /// Cached event generator. Only meaningful when `is_async` is true.
     event_gen: Option<IMFMediaEventGenerator>,
+    /// Async-only: samples waiting to be fed. We push every input here
+    /// then drain `METransformNeedInput` events without blocking, popping
+    /// from the front. This keeps NVENC's pipeline full (depth ≥ 2) so it
+    /// doesn't stall waiting for more input before producing output.
+    input_queue: VecDeque<IMFSample>,
     // Held for lifetime — see comment on D3DContext.
     _d3d: D3DContext,
     output_provides_samples: bool,
@@ -224,6 +231,7 @@ impl MftH264 {
             transform,
             is_async,
             event_gen,
+            input_queue: VecDeque::new(),
             _d3d: d3d,
             output_provides_samples,
             output_sample_size: info.cbSize,
@@ -281,7 +289,7 @@ impl MftH264 {
         let mut is_keyframe = false;
 
         if self.is_async {
-            self.drive_async(&sample, &mut is_keyframe)?;
+            self.drive_async(sample, &mut is_keyframe)?;
         } else {
             self.drive_sync(&sample, &mut is_keyframe)?;
         }
@@ -319,42 +327,47 @@ impl MftH264 {
         }
     }
 
-    /// Async path: wait for METransformNeedInput → ProcessInput, then for
-    /// METransformHaveOutput → ProcessOutput. NVENC / AMD VCN need this.
-    fn drive_async(
-        &mut self,
-        sample: &IMFSample,
-        is_keyframe: &mut bool,
-    ) -> Result<(), CodecError> {
+    /// Async path: queue the input sample, then drain whatever events are
+    /// pending without blocking. Returns when no more events are queued —
+    /// at that point either we have output (steady state) or we don't yet
+    /// (encoder is still filling its pipeline; `encode_yuv420` returns
+    /// None and the broadcast loop continues).
+    ///
+    /// Critically this **does not block**. Earlier versions called
+    /// `GetEvent(0)` which serialized encoding at ~11 fps on NVENC
+    /// because the encoder emits multiple `NeedInput` events ahead of
+    /// `HaveOutput` and blocking-wait on each event throttled the
+    /// pipeline.
+    fn drive_async(&mut self, sample: IMFSample, is_keyframe: &mut bool) -> Result<(), CodecError> {
         let event_gen = self
             .event_gen
             .as_ref()
             .ok_or_else(|| CodecError::EncodeFailed("async MFT without event gen".into()))?
             .clone();
-        let mut input_fed = false;
 
-        // Spin events until we've fed our input AND drained at least one
-        // output for this frame. Hardware encoders without B-frames emit
-        // one HaveOutput per input.
-        while !input_fed || self.out_buf.is_empty() {
-            let event = unsafe { event_gen.GetEvent(MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS(0)) }
-                .map_err(|e| CodecError::EncodeFailed(format!("GetEvent: {e}")))?;
+        self.input_queue.push_back(sample);
+
+        loop {
+            let event = unsafe { event_gen.GetEvent(MF_EVENT_FLAG_NO_WAIT) };
+            let event = match event {
+                Ok(ev) => ev,
+                Err(e) if e.code() == MF_E_NO_EVENTS_AVAILABLE => break,
+                Err(e) => return Err(CodecError::EncodeFailed(format!("GetEvent: {e}"))),
+            };
             let event_type = unsafe { event.GetType() }
                 .map_err(|e| CodecError::EncodeFailed(format!("GetType: {e}")))?
                 as i32;
 
             if event_type == METransformNeedInput.0 {
-                if !input_fed {
+                if let Some(next) = self.input_queue.pop_front() {
                     unsafe {
                         self.transform
-                            .ProcessInput(0, sample, 0)
+                            .ProcessInput(0, &next, 0)
                             .map_err(|e| CodecError::EncodeFailed(format!("ProcessInput: {e}")))?;
                     }
-                    input_fed = true;
                 }
-                // If we already fed and the encoder asks for more, the
-                // next encode call will satisfy it — leave the event for
-                // then by not re-feeding here.
+                // If queue empty, leave the NeedInput unanswered — the
+                // next encode call will push a sample and re-poll.
             } else if event_type == METransformHaveOutput.0 {
                 match self.process_one_output(is_keyframe)? {
                     ProcessOutputStep::Got | ProcessOutputStep::NeedInput => {}
@@ -363,8 +376,6 @@ impl MftH264 {
                     }
                 }
             }
-            // Other event types (drain-complete, error, etc.) are
-            // informational; we ignore them.
         }
         Ok(())
     }
@@ -665,7 +676,9 @@ fn configure_transform(transform: &IMFTransform, cfg: &SharedConfig) -> Result<(
     set_output_type(transform, cfg)?;
     set_input_type(transform, cfg)?;
 
-    // Disable B-frames + CBR for low latency.
+    // Latency-tuned encoder knobs. Most are best-effort — sync MFTs ignore
+    // CODECAPI_*Speed flags; hardware MFTs need them to skip lookahead and
+    // multi-pass. Without these, NVENC defaults to ~80 ms/frame.
     if let Ok(codec_api) = transform.cast::<ICodecAPI>() {
         unsafe {
             let v = VARIANT::from(eAVEncCommonRateControlMode_CBR.0 as u32);
@@ -674,6 +687,16 @@ fn configure_transform(transform: &IMFTransform, cfg: &SharedConfig) -> Result<(
             let _ = codec_api.SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &v as *const _);
             let v = VARIANT::from(cfg.initial_bitrate_kbps * 1000);
             let _ = codec_api.SetValue(&CODECAPI_AVEncCommonMeanBitRate, &v as *const _);
+            // Single-pass, no look-ahead. Required for hardware encoders to
+            // produce one output per input on the same frame.
+            let v = VARIANT::from(true);
+            let _ = codec_api.SetValue(&CODECAPI_AVEncCommonLowLatency, &v as *const _);
+            // Real-time hint — encoder favors speed and CPU/GPU yields.
+            let v = VARIANT::from(true);
+            let _ = codec_api.SetValue(&CODECAPI_AVEncCommonRealTime, &v as *const _);
+            // 0 = max speed, 100 = max quality. NVENC's "P1" preset.
+            let v = VARIANT::from(0u32);
+            let _ = codec_api.SetValue(&CODECAPI_AVEncCommonQualityVsSpeed, &v as *const _);
         }
     }
     Ok(())
