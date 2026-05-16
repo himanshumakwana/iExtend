@@ -61,16 +61,17 @@ use windows::Win32::Media::MediaFoundation::{
     IMFActivate, IMFDXGIDeviceManager, IMFMediaEventGenerator, IMFSample, IMFTransform,
     METransformHaveOutput, METransformNeedInput, MFCreateDXGIDeviceManager, MFCreateMediaType,
     MFCreateMemoryBuffer, MFCreateSample, MFMediaType_Video, MFSampleExtension_CleanPoint,
-    MFStartup, MFTEnumEx, MFT_FRIENDLY_NAME_Attribute, MFVideoFormat_H264, MFVideoFormat_NV12,
-    MFVideoInterlace_Progressive, MFSTARTUP_LITE, MFT_CATEGORY_VIDEO_ENCODER,
-    MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
-    MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_START_OF_STREAM,
+    MFStartup, MFTEnumEx, MFT_ENUM_HARDWARE_URL_Attribute, MFT_ENUM_HARDWARE_VENDOR_ID_Attribute,
+    MFT_FRIENDLY_NAME_Attribute, MFT_TRANSFORM_CLSID_Attribute, MFVideoFormat_H264,
+    MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFSTARTUP_LITE, MFT_CATEGORY_VIDEO_ENCODER,
+    MFT_ENUM_ADAPTER_LUID, MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER,
+    MFT_ENUM_FLAG_SYNCMFT, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_START_OF_STREAM,
     MFT_MESSAGE_SET_D3D_MANAGER, MFT_OUTPUT_DATA_BUFFER, MFT_OUTPUT_STREAM_INFO,
     MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MFT_REGISTER_TYPE_INFO, MF_EVENT_FLAG_NO_WAIT,
     MF_E_NO_EVENTS_AVAILABLE, MF_E_TRANSFORM_NEED_MORE_INPUT, MF_E_TRANSFORM_STREAM_CHANGE,
-    MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE,
-    MF_MT_MPEG2_PROFILE, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE, MF_TRANSFORM_ASYNC,
-    MF_TRANSFORM_ASYNC_UNLOCK, MF_VERSION,
+    MF_LOW_LATENCY, MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE,
+    MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE,
+    MF_TRANSFORM_ASYNC, MF_TRANSFORM_ASYNC_UNLOCK, MF_VERSION,
 };
 use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, COINIT_MULTITHREADED};
 
@@ -92,6 +93,41 @@ fn ensure_mf_initialized() -> Result<(), CodecError> {
 #[inline]
 fn pack_u64(hi: u32, lo: u32) -> u64 {
     ((hi as u64) << 32) | (lo as u64)
+}
+
+/// Log every interesting attribute an `IMFActivate` advertises. Cheap;
+/// only runs when a hardware activator is about to be tried. Helps
+/// diagnose AMD's stubborn `0x8876086C` failures without an AMD-only
+/// test host.
+fn log_activator_attributes(act: &IMFActivate, friendly_name: &str) {
+    unsafe {
+        let vendor_url = read_string_attribute(act, &MFT_ENUM_HARDWARE_URL_Attribute);
+        let vendor_id = read_string_attribute(act, &MFT_ENUM_HARDWARE_VENDOR_ID_Attribute);
+        let clsid = act.GetGUID(&MFT_TRANSFORM_CLSID_Attribute).ok();
+        let adapter_luid = act.GetUINT64(&MFT_ENUM_ADAPTER_LUID).ok();
+        let async_flag = act.GetUINT32(&MF_TRANSFORM_ASYNC).unwrap_or(0);
+        tracing::info!(
+            encoder = %friendly_name,
+            vendor_url = ?vendor_url,
+            vendor_id = ?vendor_id,
+            clsid = ?clsid,
+            adapter_luid = ?adapter_luid,
+            async_flag,
+            "MF activator candidate"
+        );
+    }
+}
+
+unsafe fn read_string_attribute(act: &IMFActivate, key: &windows::core::GUID) -> Option<String> {
+    let mut ptr: PWSTR = PWSTR::null();
+    let mut len: u32 = 0;
+    if act.GetAllocatedString(key, &mut ptr, &mut len).is_err() || ptr.0.is_null() {
+        return None;
+    }
+    let slice = std::slice::from_raw_parts(ptr.0, len as usize);
+    let s = String::from_utf16_lossy(slice);
+    CoTaskMemFree(Some(ptr.0 as _));
+    Some(s)
 }
 
 /// Read an IMFActivate's friendly name as a Rust String. Returns "<unnamed>"
@@ -627,11 +663,15 @@ fn pick_encoder(
         if !tried_names.insert(name.clone()) {
             continue;
         }
+        log_activator_attributes(&activator, &name);
 
         // Pre-unlock async MFTs. AMD's H.264 encoder fails ActivateObject
         // outright without this set on the activator; setting it has no
         // effect on sync MFTs so it's safe to do unconditionally.
         let _ = unsafe { activator.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1) };
+        // Some hardware MFTs gate activation on the caller asking for low
+        // latency. No-op for the rest. Speculative AMD workaround.
+        let _ = unsafe { activator.SetUINT32(&MF_LOW_LATENCY, 1) };
 
         let transform: IMFTransform = match unsafe { activator.ActivateObject() } {
             Ok(t) => t,
